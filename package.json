@@ -2,7 +2,7 @@
   "name": "emoji-resizer",
   "version": "1.0.0",
   "description": "カスタム絵文字用 画像一括整形・リサイズツール",
-  "main": "main.go",
+  "main": "src/main.go",
   "scripts": {
     "build": "node build.js"
   },
