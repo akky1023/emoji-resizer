@@ -1,0 +1,35 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*' # Trigger build on version tags like v1.0.0
+
+permissions:
+  contents: write # Required to create release and upload assets
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      # Build Windows executable by cross-compiling on Linux runner
+      # Injects the git tag name (e.g. v1.0.0) into main.version
+      - name: Build executable
+        run: |
+          GOOS=windows GOARCH=amd64 go build -ldflags "-X main.version=${{ github.ref_name }}" -o emoji-resizer.exe main.go
+
+      # Create GitHub Release and upload the built Windows executable
+      - name: Create Release and Upload Artifact
+        uses: softprops/action-gh-release@v2
+        with:
+          files: emoji-resizer.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
