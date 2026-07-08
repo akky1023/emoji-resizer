@@ -26,6 +26,7 @@ func main() {
 		suffix      string
 		recursive   bool
 		noResize    bool
+		rect        bool
 		showVersion bool
 	)
 
@@ -34,6 +35,7 @@ func main() {
 	flag.StringVar(&suffix, "suffix", "", "suffix to append to the output filename (e.g. '_resized')")
 	flag.BoolVar(&recursive, "r", false, "recursively scan directories")
 	flag.BoolVar(&noResize, "no-resize", false, "skip final resizing and keep the original square dimensions")
+	flag.BoolVar(&rect, "rect", false, "resize rectangle keeping aspect ratio, short side matches target size (no padding)")
 	flag.BoolVar(&showVersion, "version", false, "show version information and exit")
 	flag.Parse()
 
@@ -94,9 +96,17 @@ func main() {
 	}
 
 	if noResize {
-		fmt.Printf("Found %d image files. Starting processing (no-resize: padding only)...\n", len(filesToProcess))
+		if rect {
+			fmt.Printf("Found %d image files. Starting processing (no-resize: rect mode)...\n", len(filesToProcess))
+		} else {
+			fmt.Printf("Found %d image files. Starting processing (no-resize: padding only)...\n", len(filesToProcess))
+		}
 	} else {
-		fmt.Printf("Found %d image files. Starting processing (target size: %dx%d px)...\n", len(filesToProcess), size, size)
+		if rect {
+			fmt.Printf("Found %d image files. Starting processing (rect mode, target short side: %d px)...\n", len(filesToProcess), size)
+		} else {
+			fmt.Printf("Found %d image files. Starting processing (target size: %dx%d px)...\n", len(filesToProcess), size, size)
+		}
 	}
 
 	successCount := 0
@@ -105,7 +115,7 @@ func main() {
 		// Use backslashes on Windows for clean output log paths
 		displayPath := filepath.Clean(filePath)
 		fmt.Printf("Processing %s ... ", displayPath)
-		err := processImage(filePath, outDir, size, suffix, noResize)
+		err := processImage(filePath, outDir, size, suffix, noResize, rect)
 		if err != nil {
 			fmt.Printf("Failed: %v\n", err)
 			failureCount++
@@ -184,7 +194,7 @@ func scanDirectory(dirPath string, recursive bool, outDir string, absOutDir stri
 	return files, nil
 }
 
-func processImage(srcPath string, outDir string, targetSize int, suffix string, noResize bool) error {
+func processImage(srcPath string, outDir string, targetSize int, suffix string, noResize bool, rect bool) error {
 	// 1. Open the source file
 	file, err := os.Open(srcPath)
 	if err != nil {
@@ -223,33 +233,59 @@ func processImage(srcPath string, outDir string, targetSize int, suffix string, 
 		}
 	}
 
-	// 3. Make square (padding)
 	bounds := img.Bounds()
 	w := bounds.Dx()
 	h := bounds.Dy()
-	maxDim := w
-	if h > w {
-		maxDim = h
-	}
 
-	// Create a transparent RGBA canvas to preserve premultiplied alpha (prevents dark fringes)
-	canvas := image.NewRGBA(image.Rect(0, 0, maxDim, maxDim))
-
-	// Center coordinates
-	offsetX := (maxDim - w) / 2
-	offsetY := (maxDim - h) / 2
-
-	// Draw the source image onto the center of the canvas
-	draw.Draw(canvas, image.Rect(offsetX, offsetY, offsetX+w, offsetY+h), img, bounds.Min, draw.Src)
-
-	// 4. Resize to TargetSize x TargetSize using CatmullRom resampling if resizing is enabled
 	var finalImg image.Image
-	if noResize {
-		finalImg = canvas
+	if rect {
+		if noResize {
+			// Create a transparent RGBA canvas to preserve premultiplied alpha (prevents dark fringes)
+			canvas := image.NewRGBA(image.Rect(0, 0, w, h))
+			draw.Draw(canvas, image.Rect(0, 0, w, h), img, bounds.Min, draw.Src)
+			finalImg = canvas
+		} else {
+			var rectW, rectH int
+			if w < h {
+				rectW = targetSize
+				rectH = int(float64(h)*float64(targetSize)/float64(w) + 0.5)
+			} else {
+				rectH = targetSize
+				rectW = int(float64(w)*float64(targetSize)/float64(h) + 0.5)
+			}
+			// Draw the source image onto a transparent RGBA canvas first to preserve premultiplied alpha
+			canvas := image.NewRGBA(image.Rect(0, 0, w, h))
+			draw.Draw(canvas, image.Rect(0, 0, w, h), img, bounds.Min, draw.Src)
+
+			resized := image.NewRGBA(image.Rect(0, 0, rectW, rectH))
+			draw.CatmullRom.Scale(resized, resized.Bounds(), canvas, canvas.Bounds(), draw.Src, nil)
+			finalImg = resized
+		}
 	} else {
-		resized := image.NewRGBA(image.Rect(0, 0, targetSize, targetSize))
-		draw.CatmullRom.Scale(resized, resized.Bounds(), canvas, canvas.Bounds(), draw.Src, nil)
-		finalImg = resized
+		// 3. Make square (padding)
+		maxDim := w
+		if h > w {
+			maxDim = h
+		}
+
+		// Create a transparent RGBA canvas to preserve premultiplied alpha (prevents dark fringes)
+		canvas := image.NewRGBA(image.Rect(0, 0, maxDim, maxDim))
+
+		// Center coordinates
+		offsetX := (maxDim - w) / 2
+		offsetY := (maxDim - h) / 2
+
+		// Draw the source image onto the center of the canvas
+		draw.Draw(canvas, image.Rect(offsetX, offsetY, offsetX+w, offsetY+h), img, bounds.Min, draw.Src)
+
+		// 4. Resize to TargetSize x TargetSize using CatmullRom resampling if resizing is enabled
+		if noResize {
+			finalImg = canvas
+		} else {
+			resized := image.NewRGBA(image.Rect(0, 0, targetSize, targetSize))
+			draw.CatmullRom.Scale(resized, resized.Bounds(), canvas, canvas.Bounds(), draw.Src, nil)
+			finalImg = resized
+		}
 	}
 
 	// 5. Determine the output path
