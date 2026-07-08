@@ -42,6 +42,11 @@ func main() {
 		return
 	}
 
+	if size < 8 || size > 8192 {
+		fmt.Fprintf(os.Stderr, "Error: invalid size %d (must be between 8 and 8192 px)\n", size)
+		os.Exit(1)
+	}
+
 	args := flag.Args()
 	if len(args) == 0 {
 		// Default to current directory if no files/folders specified
@@ -95,6 +100,7 @@ func main() {
 	}
 
 	successCount := 0
+	failureCount := 0
 	for _, filePath := range filesToProcess {
 		// Use backslashes on Windows for clean output log paths
 		displayPath := filepath.Clean(filePath)
@@ -102,6 +108,7 @@ func main() {
 		err := processImage(filePath, outDir, size, suffix, noResize)
 		if err != nil {
 			fmt.Printf("Failed: %v\n", err)
+			failureCount++
 		} else {
 			fmt.Println("Success")
 			successCount++
@@ -109,6 +116,9 @@ func main() {
 	}
 
 	fmt.Printf("Finished. Successfully processed %d/%d files.\n", successCount, len(filesToProcess))
+	if failureCount > 0 {
+		os.Exit(1)
+	}
 }
 
 func isSupportedExtension(path string) bool {
@@ -133,16 +143,19 @@ func scanDirectory(dirPath string, recursive bool, outDir string, absOutDir stri
 				if info.Name() == "output" {
 					return filepath.SkipDir
 				}
-				// 2. Avoid processing custom output directory (exact path match)
+				// 2. Avoid processing custom output directory (exact path match or sub-path match)
 				if absOutDir != "" {
 					absPath, err := filepath.Abs(path)
-					if err == nil && absPath == absOutDir {
-						return filepath.SkipDir
+					if err == nil {
+						if absPath == absOutDir {
+							return filepath.SkipDir
+						}
+						// Check if absPath is a subdirectory of absOutDir
+						rel, err := filepath.Rel(absOutDir, absPath)
+						if err == nil && !strings.HasPrefix(rel, "..") {
+							return filepath.SkipDir
+						}
 					}
-				}
-				// 3. Avoid processing custom output directory by folder name
-				if outDir != "" && info.Name() == outDir {
-					return filepath.SkipDir
 				}
 			}
 			if !info.IsDir() && isSupportedExtension(path) {
@@ -180,9 +193,34 @@ func processImage(srcPath string, outDir string, targetSize int, suffix string, 
 	defer file.Close()
 
 	// 2. Decode the image
-	img, format, err := image.Decode(file)
-	if err != nil {
-		return fmt.Errorf("failed to decode image: %w", err)
+	var img image.Image
+	var format string
+	ext := filepath.Ext(srcPath)
+	extLower := strings.ToLower(ext)
+
+	if extLower == ".gif" {
+		// Scan for multi-frame animated GIFs to warn the user
+		g, errGif := gif.DecodeAll(file)
+		if errGif == nil && len(g.Image) > 1 {
+			fmt.Printf("(Warning: animated GIF detected, only the first frame will be processed) ")
+		}
+		// Reset file pointer to read the first frame via the standard Decode path
+		_, errSeek := file.Seek(0, 0)
+		if errSeek != nil {
+			if errGif == nil && len(g.Image) > 0 {
+				img = g.Image[0]
+				format = "gif"
+			} else {
+				return fmt.Errorf("failed to seek/decode GIF: %w", errSeek)
+			}
+		}
+	}
+
+	if img == nil {
+		img, format, err = image.Decode(file)
+		if err != nil {
+			return fmt.Errorf("failed to decode image: %w", err)
+		}
 	}
 
 	// 3. Make square (padding)
@@ -194,15 +232,14 @@ func processImage(srcPath string, outDir string, targetSize int, suffix string, 
 		maxDim = h
 	}
 
-	// Create a transparent NRGBA canvas to preserve non-premultiplied alpha
-	canvas := image.NewNRGBA(image.Rect(0, 0, maxDim, maxDim))
+	// Create a transparent RGBA canvas to preserve premultiplied alpha (prevents dark fringes)
+	canvas := image.NewRGBA(image.Rect(0, 0, maxDim, maxDim))
 
 	// Center coordinates
 	offsetX := (maxDim - w) / 2
 	offsetY := (maxDim - h) / 2
 
 	// Draw the source image onto the center of the canvas
-	// Using draw.Src replaces pixels completely, maintaining original alpha details
 	draw.Draw(canvas, image.Rect(offsetX, offsetY, offsetX+w, offsetY+h), img, bounds.Min, draw.Src)
 
 	// 4. Resize to TargetSize x TargetSize using CatmullRom resampling if resizing is enabled
@@ -210,13 +247,12 @@ func processImage(srcPath string, outDir string, targetSize int, suffix string, 
 	if noResize {
 		finalImg = canvas
 	} else {
-		resized := image.NewNRGBA(image.Rect(0, 0, targetSize, targetSize))
+		resized := image.NewRGBA(image.Rect(0, 0, targetSize, targetSize))
 		draw.CatmullRom.Scale(resized, resized.Bounds(), canvas, canvas.Bounds(), draw.Src, nil)
 		finalImg = resized
 	}
 
 	// 5. Determine the output path
-	ext := filepath.Ext(srcPath)
 	base := strings.TrimSuffix(filepath.Base(srcPath), ext)
 
 	// Generate output directory
@@ -234,57 +270,77 @@ func processImage(srcPath string, outDir string, targetSize int, suffix string, 
 
 	// Prevent overwriting the original file in any case
 	absSrc, err := filepath.Abs(srcPath)
-	if err == nil {
-		absDest, err := filepath.Abs(destPath)
-		if err == nil && absSrc == absDest {
-			// If they are exactly the same, force a suffix to be safe
-			outFileName = base + suffix + "_resized" + ext
-			destPath = filepath.Join(finalOutDir, outFileName)
+	if err != nil {
+		return fmt.Errorf("failed to resolve absolute path for source file: %w", err)
+	}
+	absDest, err := filepath.Abs(destPath)
+	if err != nil {
+		return fmt.Errorf("failed to resolve absolute path for destination file: %w", err)
+	}
+
+	if absSrc == absDest {
+		// If they are exactly the same, force a suffix to be safe
+		outFileName = base + suffix + "_resized" + ext
+		destPath = filepath.Join(finalOutDir, outFileName)
+		absDest, err = filepath.Abs(destPath)
+		if err != nil {
+			return fmt.Errorf("failed to resolve absolute path for safe destination file: %w", err)
 		}
 	}
 
-	outFile, err := os.Create(destPath)
-	if err != nil {
-		return fmt.Errorf("failed to create output file: %w", err)
+	if absSrc == absDest {
+		return fmt.Errorf("refusing to write: output file path is identical to source file path")
 	}
-	defer outFile.Close()
 
-	// 6. Encode the processed image using the appropriate format to maintain the original extension
-	extLower := strings.ToLower(ext)
+	// Write to a temporary file first, then rename it (atomic swap) to prevent corruption
+	tmpPath := destPath + ".tmp"
+	tmpFile, err := os.Create(tmpPath)
+	if err != nil {
+		return fmt.Errorf("failed to create temporary file: %w", err)
+	}
+	defer func() {
+		tmpFile.Close()
+		os.Remove(tmpPath) // safe to call if already renamed or closed
+	}()
+
+	// 6. Encode the processed image using the appropriate format
 	switch extLower {
 	case ".png":
-		// Lossless PNG
-		err = png.Encode(outFile, finalImg)
+		err = png.Encode(tmpFile, finalImg)
 	case ".webp":
-		// Lossless WebP
-		err = webp.Encode(outFile, finalImg, &webp.EncoderOptions{
+		err = webp.Encode(tmpFile, finalImg, &webp.EncoderOptions{
 			Lossless: true,
-			Quality:  100, // For lossless, Quality corresponds to compression effort
+			Quality:  100,
 		})
 	case ".gif":
-		// GIF (supports 1 frame transparency natively)
-		err = gif.Encode(outFile, finalImg, nil)
+		err = gif.Encode(tmpFile, finalImg, nil)
 	case ".jpg", ".jpeg":
-		// High-quality JPEG (no transparency)
-		err = jpeg.Encode(outFile, finalImg, &jpeg.Options{Quality: 95})
+		err = jpeg.Encode(tmpFile, finalImg, &jpeg.Options{Quality: 95})
 	default:
-		// Fallback based on image.Decode format detection
 		switch format {
 		case "png":
-			err = png.Encode(outFile, finalImg)
+			err = png.Encode(tmpFile, finalImg)
 		case "webp":
-			err = webp.Encode(outFile, finalImg, &webp.EncoderOptions{Lossless: true, Quality: 100})
+			err = webp.Encode(tmpFile, finalImg, &webp.EncoderOptions{Lossless: true, Quality: 100})
 		case "gif":
-			err = gif.Encode(outFile, finalImg, nil)
+			err = gif.Encode(tmpFile, finalImg, nil)
 		case "jpeg":
-			err = jpeg.Encode(outFile, finalImg, &jpeg.Options{Quality: 95})
+			err = jpeg.Encode(tmpFile, finalImg, &jpeg.Options{Quality: 95})
 		default:
-			err = png.Encode(outFile, finalImg)
+			err = png.Encode(tmpFile, finalImg)
 		}
 	}
 
 	if err != nil {
 		return fmt.Errorf("failed to encode/save image: %w", err)
+	}
+
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("failed to close temporary file: %w", err)
+	}
+
+	if err := os.Rename(tmpPath, destPath); err != nil {
+		return fmt.Errorf("failed to rename temporary file to destination: %w", err)
 	}
 
 	return nil
