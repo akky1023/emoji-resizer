@@ -24,7 +24,7 @@ jobs:
       # Injects the git tag name (e.g. v1.0.0) into main.version
       - name: Build executable
         run: |
-          GOOS=windows GOARCH=amd64 go build -ldflags "-X main.version=${{ github.ref_name }}" -o emoji-resizer.exe main.go
+          GOOS=windows GOARCH=amd64 go build -ldflags "-X main.version=${{ github.ref_name }}" -o emoji-resizer.exe src/main.go
 
       # Create GitHub Release and upload the built Windows executable
       - name: Create Release and Upload Artifact
