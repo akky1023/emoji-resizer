@@ -133,7 +133,7 @@ func processImage(srcPath string, outDir string, targetSize int, suffix string, 
 			minDim = float64(w)
 		}
 		ratio := maxDim / minDim
-		threshold := 1.618033988749895
+		threshold := 2.5
 		if autoRectRatio > 1.0 {
 			threshold = autoRectRatio
 		}
