@@ -13,6 +13,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -52,6 +53,42 @@ type zipItem struct {
 	fileName string
 }
 
+type AutoRectValue struct {
+	Active bool
+	Ratio  float64
+}
+
+func (a *AutoRectValue) String() string {
+	if !a.Active {
+		return "false"
+	}
+	if a.Ratio == 0 {
+		return "true"
+	}
+	return fmt.Sprintf("%g", a.Ratio)
+}
+
+func (a *AutoRectValue) Set(s string) error {
+	a.Active = true
+	if s == "" || s == "true" {
+		a.Ratio = 0
+		return nil
+	}
+	val, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return fmt.Errorf("invalid auto-rect ratio: %w", err)
+	}
+	if val <= 1.0 {
+		return fmt.Errorf("auto-rect ratio must be greater than 1.0")
+	}
+	a.Ratio = val
+	return nil
+}
+
+func (a *AutoRectValue) IsBoolFlag() bool {
+	return true
+}
+
 func main() {
 	var (
 		size        int
@@ -62,6 +99,7 @@ func main() {
 		rect        bool
 		showVersion bool
 		zipMode     bool
+		autoRect    AutoRectValue
 	)
 
 	flag.IntVar(&size, "size", 128, "target resize square size in pixels")
@@ -72,6 +110,7 @@ func main() {
 	flag.BoolVar(&rect, "rect", false, "resize rectangle keeping aspect ratio, short side matches target size (no padding)")
 	flag.BoolVar(&showVersion, "version", false, "show version information and exit")
 	flag.BoolVar(&zipMode, "zip", false, "pack processed images into a Misskey-compatible emoji ZIP file")
+	flag.Var(&autoRect, "auto-rect", "automatically use rect mode if aspect ratio exceeds threshold (defaults to golden ratio ~1.618)")
 	flag.Parse()
 
 	if showVersion {
@@ -145,14 +184,30 @@ func main() {
 	}
 
 	if noResize {
+		var modeStr string
 		if rect {
-			fmt.Printf("Found %d image files. Starting processing (no-resize: rect mode)...\n", len(filesToProcess))
+			modeStr = "no-resize: rect mode"
+		} else if autoRect.Active {
+			if autoRect.Ratio > 1.0 {
+				modeStr = fmt.Sprintf("no-resize: auto-rect mode threshold %g", autoRect.Ratio)
+			} else {
+				modeStr = "no-resize: auto-rect mode threshold golden ratio"
+			}
 		} else {
-			fmt.Printf("Found %d image files. Starting processing (no-resize: padding only)...\n", len(filesToProcess))
+			modeStr = "no-resize: padding only"
 		}
+		fmt.Printf("Found %d image files. Starting processing (%s)...\n", len(filesToProcess), modeStr)
 	} else {
 		if rect {
 			fmt.Printf("Found %d image files. Starting processing (rect mode, target short side: %d px)...\n", len(filesToProcess), size)
+		} else if autoRect.Active {
+			var thStr string
+			if autoRect.Ratio > 1.0 {
+				thStr = fmt.Sprintf("%g", autoRect.Ratio)
+			} else {
+				thStr = "golden ratio"
+			}
+			fmt.Printf("Found %d image files. Starting processing (auto-rect mode threshold %s, target size: %d px)...\n", len(filesToProcess), thStr, size)
 		} else {
 			fmt.Printf("Found %d image files. Starting processing (target size: %dx%d px)...\n", len(filesToProcess), size, size)
 		}
@@ -206,7 +261,7 @@ func main() {
 			customBase = name
 		}
 
-		destPath, err := processImage(filePath, outDir, size, suffix, noResize, rect, customBase)
+		destPath, err := processImage(filePath, outDir, size, suffix, noResize, rect, customBase, autoRect.Active, autoRect.Ratio)
 		if err != nil {
 			fmt.Printf("Failed: %v\n", err)
 			failureCount++
@@ -338,7 +393,7 @@ func scanDirectory(dirPath string, recursive bool, outDir string, absOutDir stri
 	return files, nil
 }
 
-func processImage(srcPath string, outDir string, targetSize int, suffix string, noResize bool, rect bool, customBase string) (string, error) {
+func processImage(srcPath string, outDir string, targetSize int, suffix string, noResize bool, rect bool, customBase string, autoRectActive bool, autoRectRatio float64) (string, error) {
 	// 1. Open the source file
 	file, err := os.Open(srcPath)
 	if err != nil {
@@ -381,8 +436,26 @@ func processImage(srcPath string, outDir string, targetSize int, suffix string, 
 	w := bounds.Dx()
 	h := bounds.Dy()
 
+	actualRect := rect
+	if autoRectActive && w > 0 && h > 0 {
+		var maxDim, minDim float64
+		if w > h {
+			maxDim = float64(w)
+			minDim = float64(h)
+		} else {
+			maxDim = float64(h)
+			minDim = float64(w)
+		}
+		ratio := maxDim / minDim
+		threshold := 1.618033988749895
+		if autoRectRatio > 1.0 {
+			threshold = autoRectRatio
+		}
+		actualRect = ratio > threshold
+	}
+
 	var finalImg image.Image
-	if rect {
+	if actualRect {
 		if noResize {
 			// Create a transparent RGBA canvas to preserve premultiplied alpha (prevents dark fringes)
 			canvas := image.NewRGBA(image.Rect(0, 0, w, h))

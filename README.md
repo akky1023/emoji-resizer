@@ -40,6 +40,7 @@ go build -o emoji-resizer.exe src/main.go
 
 * `-size`: リサイズ後の短辺（-rect指定時）または一辺、px単位 (デフォルト: 128)
 * `-rect`: 短辺を-sizeに合わせてリサイズする。アスペクト比はそのまま（余白による正方形化を行わない）
+* `-auto-rect`: アスペクト比（長辺/短辺）がしきい値を超える場合にのみ自動で `rect` モードとして扱い、それ以外は正方形（余白追加）として処理する。引数なしの場合は黄金比（~1.618）をしきい値とする。数値を指定する場合（例: `-auto-rect=2.0`）は1より大きい値のみ指定可能。
 * `-out`: 出力ディレクトリ指定 (デフォルト: output/)
 * `-suffix`: 出力ファイル名に付与する接尾辞 (デフォルト: なし)
 * `-r`: 再帰的に画像取得 
@@ -51,6 +52,7 @@ go build -o emoji-resizer.exe src/main.go
 ```bash
 ./emoji-resizer.exe -size 256 -suffix _resized sample.png
 ```
+(なんかオプションは手前に付けないと怒られます。)
 
 ## ライセンス
 

@@ -35,7 +35,7 @@ func TestProcessImageRect(t *testing.T) {
 	// Target size: 128x128
 	// Output should be a 128x128 square image.
 	outDir1 := filepath.Join(tmpDir, "out1")
-	_, err = processImage(srcPath, outDir1, 128, "", false, false, "")
+	_, err = processImage(srcPath, outDir1, 128, "", false, false, "", false, 0)
 	if err != nil {
 		t.Errorf("processImage (rect=false) failed: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestProcessImageRect(t *testing.T) {
 	// Target size: 128 (short side matches 128)
 	// Since w < h (100 < 200), width (short side) should become 128, and height should scale to 256.
 	outDir2 := filepath.Join(tmpDir, "out2")
-	_, err = processImage(srcPath, outDir2, 128, "", false, true, "")
+	_, err = processImage(srcPath, outDir2, 128, "", false, true, "", false, 0)
 	if err != nil {
 		t.Errorf("processImage (rect=true, vertical) failed: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestProcessImageRect(t *testing.T) {
 	// Target size: 128 (short side matches 128)
 	// Since h3 < w3 (150 < 300), height (short side) should become 128, and width should scale to 256.
 	outDir3 := filepath.Join(tmpDir, "out3")
-	_, err = processImage(srcPath3, outDir3, 128, "", false, true, "")
+	_, err = processImage(srcPath3, outDir3, 128, "", false, true, "", false, 0)
 	if err != nil {
 		t.Errorf("processImage (rect=true, horizontal) failed: %v", err)
 	}
@@ -194,5 +194,82 @@ func TestIsPureHiraganaOrSafe(t *testing.T) {
 		if got != tc.expected {
 			t.Errorf("isPureHiraganaOrSafe(%q) = %t; expected %t", tc.input, got, tc.expected)
 		}
+	}
+}
+
+func TestProcessImageAutoRect(t *testing.T) {
+	// Create a temporary directory
+	tmpDir, err := os.MkdirTemp("", "emoji-resizer-autorect-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Case 1: 100x120 (aspect ratio = 1.2 < 1.618 golden ratio).
+	// Under default auto-rect, it should NOT trigger rect mode -> processed as square (padding to 128x128).
+	img1 := image.NewRGBA(image.Rect(0, 0, 100, 120))
+	srcPath1 := filepath.Join(tmpDir, "img1.png")
+	f1, _ := os.Create(srcPath1)
+	png.Encode(f1, img1)
+	f1.Close()
+
+	outDir1 := filepath.Join(tmpDir, "out1")
+	outPath1, err := processImage(srcPath1, outDir1, 128, "", false, false, "", true, 0)
+	if err != nil {
+		t.Fatalf("failed to process image 1: %v", err)
+	}
+	rf1, _ := os.Open(outPath1)
+	ri1, _ := png.Decode(rf1)
+	rf1.Close()
+	if ri1.Bounds().Dx() != 128 || ri1.Bounds().Dy() != 128 {
+		t.Errorf("expected 128x128 for ratio 1.2 under golden ratio thres, got %dx%d", ri1.Bounds().Dx(), ri1.Bounds().Dy())
+	}
+
+	// Case 2: 100x200 (aspect ratio = 2.0 > 1.618 golden ratio).
+	// Under default auto-rect, it SHOULD trigger rect mode -> kept as rect (short side 128, long side 256).
+	img2 := image.NewRGBA(image.Rect(0, 0, 100, 200))
+	srcPath2 := filepath.Join(tmpDir, "img2.png")
+	f2, _ := os.Create(srcPath2)
+	png.Encode(f2, img2)
+	f2.Close()
+
+	outDir2 := filepath.Join(tmpDir, "out2")
+	outPath2, err := processImage(srcPath2, outDir2, 128, "", false, false, "", true, 0)
+	if err != nil {
+		t.Fatalf("failed to process image 2: %v", err)
+	}
+	rf2, _ := os.Open(outPath2)
+	ri2, _ := png.Decode(rf2)
+	rf2.Close()
+	if ri2.Bounds().Dx() != 128 || ri2.Bounds().Dy() != 256 {
+		t.Errorf("expected 128x256 for ratio 2.0 under golden ratio thres, got %dx%d", ri2.Bounds().Dx(), ri2.Bounds().Dy())
+	}
+
+	// Case 3: 100x200 (ratio 2.0) with custom ratio threshold = 2.5 (2.0 < 2.5).
+	// It should NOT trigger rect mode -> processed as square (128x128).
+	outDir3 := filepath.Join(tmpDir, "out3")
+	outPath3, err := processImage(srcPath2, outDir3, 128, "", false, false, "", true, 2.5)
+	if err != nil {
+		t.Fatalf("failed to process image 3: %v", err)
+	}
+	rf3, _ := os.Open(outPath3)
+	ri3, _ := png.Decode(rf3)
+	rf3.Close()
+	if ri3.Bounds().Dx() != 128 || ri3.Bounds().Dy() != 128 {
+		t.Errorf("expected 128x128 for ratio 2.0 under 2.5 thres, got %dx%d", ri3.Bounds().Dx(), ri3.Bounds().Dy())
+	}
+
+	// Case 4: 100x200 (ratio 2.0) with custom ratio threshold = 1.5 (2.0 > 1.5).
+	// It SHOULD trigger rect mode -> processed as rect (128x256).
+	outDir4 := filepath.Join(tmpDir, "out4")
+	outPath4, err := processImage(srcPath2, outDir4, 128, "", false, false, "", true, 1.5)
+	if err != nil {
+		t.Fatalf("failed to process image 4: %v", err)
+	}
+	rf4, _ := os.Open(outPath4)
+	ri4, _ := png.Decode(rf4)
+	rf4.Close()
+	if ri4.Bounds().Dx() != 128 || ri4.Bounds().Dy() != 256 {
+		t.Errorf("expected 128x256 for ratio 2.0 under 1.5 thres, got %dx%d", ri4.Bounds().Dx(), ri4.Bounds().Dy())
 	}
 }
