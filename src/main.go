@@ -1,15 +1,20 @@
 package main
 
 import (
+	"archive/zip"
+	"bufio"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"image"
 	"image/gif"
 	"image/jpeg"
 	"image/png"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"golang.org/x/image/draw"
 
@@ -18,6 +23,34 @@ import (
 )
 
 var version = "devel"
+
+type MisskeyEmojiInfo struct {
+	Name        string   `json:"name"`
+	Category    string   `json:"category,omitempty"`
+	Host        *string  `json:"host,omitempty"`
+	Aliases     []string `json:"aliases"`
+	License     string   `json:"license,omitempty"`
+	IsSensitive *bool    `json:"isSensitive,omitempty"`
+	LocalOnly   *bool    `json:"localOnly,omitempty"`
+}
+
+type MisskeyEmojiEntry struct {
+	FileName   string           `json:"fileName"`
+	Downloaded bool             `json:"downloaded"`
+	Emoji      MisskeyEmojiInfo `json:"emoji"`
+}
+
+type MisskeyMeta struct {
+	MetaVersion int                  `json:"metaVersion"`
+	Host        *string              `json:"host,omitempty"`
+	ExportedAt  string               `json:"exportedAt"`
+	Emojis      []MisskeyEmojiEntry `json:"emojis"`
+}
+
+type zipItem struct {
+	absPath  string
+	fileName string
+}
 
 func main() {
 	var (
@@ -28,6 +61,7 @@ func main() {
 		noResize    bool
 		rect        bool
 		showVersion bool
+		zipMode     bool
 	)
 
 	flag.IntVar(&size, "size", 128, "target resize square size in pixels")
@@ -37,6 +71,7 @@ func main() {
 	flag.BoolVar(&noResize, "no-resize", false, "skip final resizing and keep the original square dimensions")
 	flag.BoolVar(&rect, "rect", false, "resize rectangle keeping aspect ratio, short side matches target size (no padding)")
 	flag.BoolVar(&showVersion, "version", false, "show version information and exit")
+	flag.BoolVar(&zipMode, "zip", false, "pack processed images into a Misskey-compatible emoji ZIP file")
 	flag.Parse()
 
 	if showVersion {
@@ -63,6 +98,20 @@ func main() {
 		if err != nil {
 			fmt.Printf("Warning: failed to resolve absolute path for output directory: %v\n", err)
 		}
+	}
+
+	// Ask for category and license if zipMode is active
+	var category string
+	var license string
+	if zipMode {
+		reader := bufio.NewReader(os.Stdin)
+		fmt.Print("emoji.category を入力してください (スキップするにはEnter): ")
+		catInput, _ := reader.ReadString('\n')
+		category = strings.TrimSpace(catInput)
+
+		fmt.Print("emoji.license を入力してください (スキップするにはEnter): ")
+		licInput, _ := reader.ReadString('\n')
+		license = strings.TrimSpace(licInput)
 	}
 
 	// Collect files to process
@@ -109,19 +158,114 @@ func main() {
 		}
 	}
 
+	var firstOutDir string
+	var zipItems []zipItem
+	var emojiEntries []MisskeyEmojiEntry
+
 	successCount := 0
 	failureCount := 0
 	for _, filePath := range filesToProcess {
 		// Use backslashes on Windows for clean output log paths
 		displayPath := filepath.Clean(filePath)
 		fmt.Printf("Processing %s ... ", displayPath)
-		err := processImage(filePath, outDir, size, suffix, noResize, rect)
+
+		var customBase string
+		var name, hiragana, katakana, hepburn string
+		var hasPronunciation bool
+
+		if zipMode {
+			ext := filepath.Ext(filePath)
+			base := strings.TrimSuffix(filepath.Base(filePath), ext)
+
+			if isPureHiraganaOrSafe(base) {
+				hiragana = base
+				katakana = hiraganaToKatakana(hiragana)
+				var hepburnRaw string
+				name, hepburnRaw = hiraganaToRomaji(hiragana)
+				name = strings.ToLower(name)
+				hepburn = strings.ToLower(hepburnRaw)
+				hasPronunciation = true
+			} else if containsJapanese(base) {
+				reader := bufio.NewReader(os.Stdin)
+				fmt.Printf("ファイル名 '%s' のひらがな表記を入力してください (英語などの場合はそのままEnter): ", base)
+				input, _ := reader.ReadString('\n')
+				hiragana = strings.TrimSpace(input)
+				if hiragana != "" {
+					katakana = hiraganaToKatakana(hiragana)
+					var hepburnRaw string
+					name, hepburnRaw = hiraganaToRomaji(hiragana)
+					name = strings.ToLower(name)
+					hepburn = strings.ToLower(hepburnRaw)
+					hasPronunciation = true
+				} else {
+					name = strings.ToLower(base)
+				}
+			} else {
+				name = strings.ToLower(base)
+			}
+			customBase = name
+		}
+
+		destPath, err := processImage(filePath, outDir, size, suffix, noResize, rect, customBase)
 		if err != nil {
 			fmt.Printf("Failed: %v\n", err)
 			failureCount++
 		} else {
 			fmt.Println("Success")
 			successCount++
+
+			if zipMode {
+				if firstOutDir == "" {
+					firstOutDir = filepath.Dir(destPath)
+				}
+				outFileName := filepath.Base(destPath)
+				zipItems = append(zipItems, zipItem{
+					absPath:  destPath,
+					fileName: outFileName,
+				})
+
+				aliases := []string{}
+				if hasPronunciation {
+					aliases = addUnique(aliases, hiragana)
+					aliases = addUnique(aliases, katakana)
+					if name != hepburn {
+						aliases = addUnique(aliases, hepburn)
+					}
+				}
+
+				entry := MisskeyEmojiEntry{
+					FileName:   outFileName,
+					Downloaded: true,
+					Emoji: MisskeyEmojiInfo{
+						Name:    name,
+						Aliases: aliases,
+					},
+				}
+				if category != "" {
+					entry.Emoji.Category = category
+				}
+				if license != "" {
+					entry.Emoji.License = license
+				}
+				emojiEntries = append(emojiEntries, entry)
+			}
+		}
+	}
+
+	if zipMode && successCount > 0 {
+		var zipPath string
+		if firstOutDir != "" {
+			zipPath = filepath.Join(firstOutDir, "emojis.zip")
+		} else {
+			zipPath = "emojis.zip"
+		}
+		fmt.Printf("Creating ZIP archive at %s ... ", zipPath)
+		err := createEmojiZip(zipPath, zipItems, emojiEntries)
+		if err != nil {
+			fmt.Printf("Failed: %v\n", err)
+			os.Exit(1)
+		} else {
+			fmt.Println("Success")
 		}
 	}
 
@@ -194,11 +338,11 @@ func scanDirectory(dirPath string, recursive bool, outDir string, absOutDir stri
 	return files, nil
 }
 
-func processImage(srcPath string, outDir string, targetSize int, suffix string, noResize bool, rect bool) error {
+func processImage(srcPath string, outDir string, targetSize int, suffix string, noResize bool, rect bool, customBase string) (string, error) {
 	// 1. Open the source file
 	file, err := os.Open(srcPath)
 	if err != nil {
-		return fmt.Errorf("failed to open file: %w", err)
+		return "", fmt.Errorf("failed to open file: %w", err)
 	}
 	defer file.Close()
 
@@ -221,7 +365,7 @@ func processImage(srcPath string, outDir string, targetSize int, suffix string, 
 				img = g.Image[0]
 				format = "gif"
 			} else {
-				return fmt.Errorf("failed to seek/decode GIF: %w", errSeek)
+				return "", fmt.Errorf("failed to seek/decode GIF: %w", errSeek)
 			}
 		}
 	}
@@ -229,7 +373,7 @@ func processImage(srcPath string, outDir string, targetSize int, suffix string, 
 	if img == nil {
 		img, format, err = image.Decode(file)
 		if err != nil {
-			return fmt.Errorf("failed to decode image: %w", err)
+			return "", fmt.Errorf("failed to decode image: %w", err)
 		}
 	}
 
@@ -289,7 +433,10 @@ func processImage(srcPath string, outDir string, targetSize int, suffix string, 
 	}
 
 	// 5. Determine the output path
-	base := strings.TrimSuffix(filepath.Base(srcPath), ext)
+	base := customBase
+	if base == "" {
+		base = strings.TrimSuffix(filepath.Base(srcPath), ext)
+	}
 
 	// Generate output directory
 	finalOutDir := outDir
@@ -298,7 +445,7 @@ func processImage(srcPath string, outDir string, targetSize int, suffix string, 
 	}
 
 	if err := os.MkdirAll(finalOutDir, 0755); err != nil {
-		return fmt.Errorf("failed to create output directory: %w", err)
+		return "", fmt.Errorf("failed to create output directory: %w", err)
 	}
 
 	outFileName := base + suffix + ext
@@ -307,11 +454,11 @@ func processImage(srcPath string, outDir string, targetSize int, suffix string, 
 	// Prevent overwriting the original file in any case
 	absSrc, err := filepath.Abs(srcPath)
 	if err != nil {
-		return fmt.Errorf("failed to resolve absolute path for source file: %w", err)
+		return "", fmt.Errorf("failed to resolve absolute path for source file: %w", err)
 	}
 	absDest, err := filepath.Abs(destPath)
 	if err != nil {
-		return fmt.Errorf("failed to resolve absolute path for destination file: %w", err)
+		return "", fmt.Errorf("failed to resolve absolute path for destination file: %w", err)
 	}
 
 	if absSrc == absDest {
@@ -320,19 +467,19 @@ func processImage(srcPath string, outDir string, targetSize int, suffix string, 
 		destPath = filepath.Join(finalOutDir, outFileName)
 		absDest, err = filepath.Abs(destPath)
 		if err != nil {
-			return fmt.Errorf("failed to resolve absolute path for safe destination file: %w", err)
+			return "", fmt.Errorf("failed to resolve absolute path for safe destination file: %w", err)
 		}
 	}
 
 	if absSrc == absDest {
-		return fmt.Errorf("refusing to write: output file path is identical to source file path")
+		return "", fmt.Errorf("refusing to write: output file path is identical to source file path")
 	}
 
 	// Write to a temporary file first, then rename it (atomic swap) to prevent corruption
 	tmpPath := destPath + ".tmp"
 	tmpFile, err := os.Create(tmpPath)
 	if err != nil {
-		return fmt.Errorf("failed to create temporary file: %w", err)
+		return "", fmt.Errorf("failed to create temporary file: %w", err)
 	}
 	defer func() {
 		tmpFile.Close()
@@ -368,16 +515,246 @@ func processImage(srcPath string, outDir string, targetSize int, suffix string, 
 	}
 
 	if err != nil {
-		return fmt.Errorf("failed to encode/save image: %w", err)
+		return "", fmt.Errorf("failed to encode/save image: %w", err)
 	}
 
 	if err := tmpFile.Close(); err != nil {
-		return fmt.Errorf("failed to close temporary file: %w", err)
+		return "", fmt.Errorf("failed to close temporary file: %w", err)
 	}
 
 	if err := os.Rename(tmpPath, destPath); err != nil {
-		return fmt.Errorf("failed to rename temporary file to destination: %w", err)
+		return "", fmt.Errorf("failed to rename temporary file to destination: %w", err)
+	}
+
+	return destPath, nil
+}
+
+func isYoonSuffix(r rune) bool {
+	switch r {
+	case 'ゃ', 'ゅ', 'ょ', 'ぁ', 'ぃ', 'ぅ', 'ぇ', 'ぉ':
+		return true
+	}
+	return false
+}
+
+func isConsonant(b byte) bool {
+	switch b {
+	case 'a', 'i', 'u', 'e', 'o':
+		return false
+	}
+	return b >= 'a' && b <= 'z'
+}
+
+func katakanaToHiragana(s string) string {
+	var sb strings.Builder
+	for _, r := range s {
+		if r >= 0x30A1 && r <= 0x30F6 {
+			sb.WriteRune(r - 0x60)
+		} else {
+			sb.WriteRune(r)
+		}
+	}
+	return sb.String()
+}
+
+func hiraganaToKatakana(s string) string {
+	var sb strings.Builder
+	for _, r := range s {
+		if r >= 0x3041 && r <= 0x3096 {
+			sb.WriteRune(r + 0x60)
+		} else {
+			sb.WriteRune(r)
+		}
+	}
+	return sb.String()
+}
+
+func containsJapanese(s string) bool {
+	for _, r := range s {
+		if (r >= 0x3040 && r <= 0x309F) || (r >= 0x30A0 && r <= 0x30FF) || (r >= 0x4E00 && r <= 0x9FFF) {
+			return true
+		}
+	}
+	return false
+}
+
+var romajiMap = map[string]struct{ Kunrei, Hepburn string }{
+	"きゃ": {"kya", "kya"}, "きゅ": {"kyu", "kyu"}, "きょ": {"kyo", "kyo"},
+	"ぎゃ": {"gya", "gya"}, "ぎゅ": {"gyu", "gyu"}, "ぎょ": {"gyo", "gyo"},
+	"しゃ": {"sya", "sha"}, "しゅ": {"syu", "shu"}, "しょ": {"syo", "sho"},
+	"じゃ": {"zya", "ja"},  "じゅ": {"zyu", "ju"},  "じょ": {"zyo", "jo"},
+	"ちゃ": {"tya", "cha"}, "ちゅ": {"tyu", "chu"}, "ちょ": {"tyo", "cho"},
+	"ぢゃ": {"zya", "ja"},  "ぢゅ": {"zyu", "ju"},  "ぢょ": {"zyo", "jo"},
+	"にゃ": {"nya", "nya"}, "にゅ": {"nyu", "nyu"}, "にょ": {"nyo", "nyo"},
+	"ひゃ": {"hya", "hya"}, "ひゅ": {"hyu", "hyu"}, "ひょ": {"hyo", "hyo"},
+	"びゃ": {"bya", "bya"}, "びゅ": {"byu", "byu"}, "びょ": {"byo", "byo"},
+	"ぴゃ": {"pya", "pya"}, "ぴゅ": {"pyu", "pyu"}, "ぴょ": {"pyo", "pyo"},
+	"みゃ": {"mya", "mya"}, "みゅ": {"myu", "myu"}, "みょ": {"myo", "myo"},
+	"りゃ": {"rya", "rya"}, "りゅ": {"ryu", "ryu"}, "りょ": {"ryo", "ryo"},
+	"ふぁ": {"fa", "fa"},   "ふぃ": {"fi", "fi"},   "ふぇ": {"fe", "fe"},   "ふぉ": {"fo", "fo"},
+	"ゔぁ": {"va", "va"},   "ゔぃ": {"vi", "vi"},   "ゔぇ": {"ve", "ve"},   "ゔぉ": {"vo", "vo"},
+
+	"あ": {"a", "a"}, "い": {"i", "i"}, "う": {"u", "u"}, "え": {"e", "e"}, "お": {"o", "o"},
+	"か": {"ka", "ka"}, "き": {"ki", "ki"}, "く": {"ku", "ku"}, "け": {"ke", "ke"}, "こ": {"ko", "ko"},
+	"が": {"ga", "ga"}, "ぎ": {"gi", "gi"}, "ぐ": {"gu", "gu"}, "げ": {"ge", "ge"}, "ご": {"go", "go"},
+	"さ": {"sa", "sa"}, "し": {"si", "shi"}, "す": {"su", "su"}, "せ": {"se", "se"}, "そ": {"so", "so"},
+	"ざ": {"za", "za"}, "じ": {"zi", "ji"}, "ず": {"zu", "zu"}, "ぜ": {"ze", "ze"}, "ぞ": {"zo", "zo"},
+	"た": {"ta", "ta"}, "ち": {"ti", "chi"}, "つ": {"tu", "tsu"}, "て": {"te", "te"}, "と": {"to", "to"},
+	"だ": {"da", "da"}, "ぢ": {"zi", "ji"}, "づ": {"zu", "zu"}, "で": {"de", "de"}, "ど": {"do", "do"},
+	"な": {"na", "na"}, "に": {"ni", "ni"}, "ぬ": {"nu", "nu"}, "ね": {"ne", "ne"}, "の": {"no", "no"},
+	"は": {"ha", "ha"}, "ひ": {"hi", "hi"}, "ふ": {"hu", "fu"}, "へ": {"he", "he"}, "ほ": {"ho", "ho"},
+	"ば": {"ba", "ba"}, "び": {"bi", "bi"}, "ぶ": {"bu", "bu"}, "べ": {"be", "be"}, "ぼ": {"bo", "bo"},
+	"ぱ": {"pa", "pa"}, "ぴ": {"pi", "pi"}, "ぷ": {"pu", "pu"}, "ぺ": {"pe", "pe"}, "ぽ": {"po", "po"},
+	"ま": {"ma", "ma"}, "み": {"mi", "mi"}, "む": {"mu", "mu"}, "め": {"me", "me"}, "も": {"mo", "mo"},
+	"や": {"ya", "ya"}, "ゆ": {"yu", "yu"}, "よ": {"yo", "yo"},
+	"ら": {"ra", "ra"}, "り": {"ri", "ri"}, "る": {"ru", "ru"}, "れ": {"re", "re"}, "ろ": {"ro", "ro"},
+	"わ": {"wa", "wa"}, "を": {"o", "wo"}, "ん": {"n", "n"},
+	"ゔ": {"vu", "vu"},
+	"ゐ": {"i", "i"}, "ゑ": {"e", "e"},
+}
+
+func hiraganaToRomaji(input string) (kunrei string, hepburn string) {
+	normalized := katakanaToHiragana(input)
+	var kResult strings.Builder
+	var hResult strings.Builder
+
+	runes := []rune(normalized)
+	i := 0
+	n := len(runes)
+
+	for i < n {
+		if runes[i] == 'っ' {
+			if i+1 < n {
+				nextRune := runes[i+1]
+				nextStr := string(nextRune)
+				if i+2 < n && isYoonSuffix(runes[i+2]) {
+					nextStr = string(runes[i+1 : i+3])
+				}
+
+				kNext, hNext := lookupRomaji(nextStr)
+
+				if len(kNext) > 0 && isConsonant(kNext[0]) {
+					kResult.WriteByte(kNext[0])
+				}
+
+				if len(hNext) > 0 && isConsonant(hNext[0]) {
+					if strings.HasPrefix(hNext, "ch") {
+						hResult.WriteByte('t')
+					} else {
+						hResult.WriteByte(hNext[0])
+					}
+				}
+			}
+			i++
+			continue
+		}
+
+		if runes[i] == 'ー' {
+			i++
+			continue
+		}
+
+		if i+1 < n {
+			twoChars := string(runes[i : i+2])
+			if val, ok := romajiMap[twoChars]; ok {
+				kResult.WriteString(val.Kunrei)
+				hResult.WriteString(val.Hepburn)
+				i += 2
+				continue
+			}
+		}
+
+		charStr := string(runes[i])
+		if val, ok := romajiMap[charStr]; ok {
+			kResult.WriteString(val.Kunrei)
+			hResult.WriteString(val.Hepburn)
+		} else {
+			kResult.WriteRune(runes[i])
+			hResult.WriteRune(runes[i])
+		}
+		i++
+	}
+
+	return kResult.String(), hResult.String()
+}
+
+func lookupRomaji(s string) (string, string) {
+	if val, ok := romajiMap[s]; ok {
+		return val.Kunrei, val.Hepburn
+	}
+	return "", ""
+}
+
+func addUnique(slice []string, val string) []string {
+	for _, s := range slice {
+		if s == val {
+			return slice
+		}
+	}
+	return append(slice, val)
+}
+
+func createEmojiZip(zipPath string, items []zipItem, entries []MisskeyEmojiEntry) error {
+	zipFile, err := os.Create(zipPath)
+	if err != nil {
+		return fmt.Errorf("failed to create zip file: %w", err)
+	}
+	defer zipFile.Close()
+
+	archive := zip.NewWriter(zipFile)
+	defer archive.Close()
+
+	// 1. Create meta.json
+	meta := MisskeyMeta{
+		MetaVersion: 2,
+		ExportedAt:  time.Now().UTC().Format(time.RFC3339),
+		Emojis:      entries,
+	}
+	metaBytes, err := json.MarshalIndent(meta, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal meta.json: %w", err)
+	}
+
+	metaFileWriter, err := archive.Create("meta.json")
+	if err != nil {
+		return fmt.Errorf("failed to create meta.json in zip: %w", err)
+	}
+	if _, err := metaFileWriter.Write(metaBytes); err != nil {
+		return fmt.Errorf("failed to write meta.json to zip: %w", err)
+	}
+
+	// 2. Add each image
+	for _, item := range items {
+		imgFile, err := os.Open(item.absPath)
+		if err != nil {
+			return fmt.Errorf("failed to open processed image %s: %w", item.absPath, err)
+		}
+
+		imgFileWriter, err := archive.Create(item.fileName)
+		if err != nil {
+			imgFile.Close()
+			return fmt.Errorf("failed to create file %s in zip: %w", item.fileName, err)
+		}
+
+		if _, err := io.Copy(imgFileWriter, imgFile); err != nil {
+			imgFile.Close()
+			return fmt.Errorf("failed to copy file %s to zip: %w", item.fileName, err)
+		}
+		imgFile.Close()
 	}
 
 	return nil
+}
+
+func isPureHiraganaOrSafe(s string) bool {
+	for _, r := range s {
+		if (r >= 0x3041 && r <= 0x3096) || r == 0x3094 || r == 'ー' {
+			continue
+		}
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+			continue
+		}
+		return false
+	}
+	return true
 }

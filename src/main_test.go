@@ -35,7 +35,7 @@ func TestProcessImageRect(t *testing.T) {
 	// Target size: 128x128
 	// Output should be a 128x128 square image.
 	outDir1 := filepath.Join(tmpDir, "out1")
-	err = processImage(srcPath, outDir1, 128, "", false, false)
+	_, err = processImage(srcPath, outDir1, 128, "", false, false, "")
 	if err != nil {
 		t.Errorf("processImage (rect=false) failed: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestProcessImageRect(t *testing.T) {
 	// Target size: 128 (short side matches 128)
 	// Since w < h (100 < 200), width (short side) should become 128, and height should scale to 256.
 	outDir2 := filepath.Join(tmpDir, "out2")
-	err = processImage(srcPath, outDir2, 128, "", false, true)
+	_, err = processImage(srcPath, outDir2, 128, "", false, true, "")
 	if err != nil {
 		t.Errorf("processImage (rect=true, vertical) failed: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestProcessImageRect(t *testing.T) {
 	// Target size: 128 (short side matches 128)
 	// Since h3 < w3 (150 < 300), height (short side) should become 128, and width should scale to 256.
 	outDir3 := filepath.Join(tmpDir, "out3")
-	err = processImage(srcPath3, outDir3, 128, "", false, true)
+	_, err = processImage(srcPath3, outDir3, 128, "", false, true, "")
 	if err != nil {
 		t.Errorf("processImage (rect=true, horizontal) failed: %v", err)
 	}
@@ -112,5 +112,87 @@ func TestProcessImageRect(t *testing.T) {
 	b3 := img4.Bounds()
 	if b3.Dx() != 256 || b3.Dy() != 128 {
 		t.Errorf("expected 256x128 image, got %dx%d", b3.Dx(), b3.Dy())
+	}
+}
+
+func TestRomajiConversion(t *testing.T) {
+	tests := []struct {
+		input   string
+		kunrei  string
+		hepburn string
+	}{
+		{"ねこ", "neko", "neko"},
+		{"ネコ", "neko", "neko"},
+		{"しんぶん", "sinbun", "shinbun"},
+		{"がっこう", "gakkou", "gakkou"},
+		{"まっちゃ", "mattya", "matcha"},
+		{"らーめん", "ramen", "ramen"},
+		{"しゃしん", "syasin", "shashin"},
+		{"かんじ", "kanzi", "kanji"},
+		{"てすと_123", "tesuto_123", "tesuto_123"},
+	}
+
+	for _, tc := range tests {
+		k, h := hiraganaToRomaji(tc.input)
+		if k != tc.kunrei {
+			t.Errorf("hiraganaToRomaji(%q) Kunrei: expected %q, got %q", tc.input, tc.kunrei, k)
+		}
+		if h != tc.hepburn {
+			t.Errorf("hiraganaToRomaji(%q) Hepburn: expected %q, got %q", tc.input, tc.hepburn, h)
+		}
+	}
+}
+
+func TestKatakanaToHiragana(t *testing.T) {
+	input := "テストラーメン"
+	expected := "てすとらーめん"
+	got := katakanaToHiragana(input)
+	if got != expected {
+		t.Errorf("katakanaToHiragana(%q) = %q; expected %q", input, got, expected)
+	}
+}
+
+func TestHiraganaToKatakana(t *testing.T) {
+	input := "てすとらーめん"
+	expected := "テストラーメン"
+	got := hiraganaToKatakana(input)
+	if got != expected {
+		t.Errorf("hiraganaToKatakana(%q) = %q; expected %q", input, got, expected)
+	}
+}
+
+func TestContainsJapanese(t *testing.T) {
+	if !containsJapanese("ねこ") {
+		t.Errorf("expected containsJapanese(\"ねこ\") to be true")
+	}
+	if !containsJapanese("ネコ") {
+		t.Errorf("expected containsJapanese(\"ネコ\") to be true")
+	}
+	if !containsJapanese("猫") {
+		t.Errorf("expected containsJapanese(\"猫\") to be true")
+	}
+	if containsJapanese("cat_123-") {
+		t.Errorf("expected containsJapanese(\"cat_123-\") to be false")
+	}
+}
+
+func TestIsPureHiraganaOrSafe(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected bool
+	}{
+		{"ねこ", true},
+		{"ねこ123_-", true},
+		{"らーめん", true},
+		{"ネコ", false}, // Katakana
+		{"猫", false},  // Kanji
+		{"cat", true},  // English is considered safe too (containsJapanese will be false, so it won't prompt either)
+	}
+
+	for _, tc := range tests {
+		got := isPureHiraganaOrSafe(tc.input)
+		if got != tc.expected {
+			t.Errorf("isPureHiraganaOrSafe(%q) = %t; expected %t", tc.input, got, tc.expected)
+		}
 	}
 }
