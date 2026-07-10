@@ -15,7 +15,7 @@ npm run build
 
 ### go コマンド
 ```bash
-go build -o emoji-resizer.exe src/main.go
+go build -o emoji-resizer.exe ./src
 ```
 ※ Go 1.18 以上。
 ※ この方法でビルドした場合、バージョン情報が `devel` になる
