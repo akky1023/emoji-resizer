@@ -5,6 +5,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -288,5 +289,141 @@ func TestProcessImageAutoRect(t *testing.T) {
 	rf4.Close()
 	if ri4.Bounds().Dx() != 128 || ri4.Bounds().Dy() != 256 {
 		t.Errorf("expected 128x256 for ratio 2.0 under 1.5 thres, got %dx%d", ri4.Bounds().Dx(), ri4.Bounds().Dy())
+	}
+}
+
+func TestRecursiveZipMode(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "emoji-resizer-zip-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Create subdirectories
+	subDir1 := filepath.Join(tmpDir, "sub1")
+	subDir2 := filepath.Join(tmpDir, "sub1", "sub2")
+	if err := os.MkdirAll(subDir2, 0755); err != nil {
+		t.Fatalf("failed to create subdirs: %v", err)
+	}
+
+	// Create dummy images in subdirectories
+	img := image.NewRGBA(image.Rect(0, 0, 10, 10))
+	img1Path := filepath.Join(subDir1, "img1.png")
+	f1, _ := os.Create(img1Path)
+	png.Encode(f1, img)
+	f1.Close()
+
+	img2Path := filepath.Join(subDir2, "img2.png")
+	f2, _ := os.Create(img2Path)
+	png.Encode(f2, img)
+	f2.Close()
+
+	// Scan directory recursively
+	filesToProcess, err := scanDirectory(tmpDir, true, "", "")
+	if err != nil {
+		t.Fatalf("scanDirectory failed: %v", err)
+	}
+
+	if len(filesToProcess) != 2 {
+		t.Fatalf("expected 2 files, got %d", len(filesToProcess))
+	}
+
+	// Determine topLevelOutDir (same logic as in main)
+	topLevelOutDir := filepath.Join(tmpDir, "output")
+	absTopLevelInDir, _ := filepath.Abs(tmpDir)
+
+	// Process files and collect zip items grouped by directory
+	dirZips := make(map[string]*dirZipData)
+	var allZipItems []zipItem
+	var allEmojiEntries []MisskeyEmojiEntry
+
+	for _, filePath := range filesToProcess {
+		destPath, err := processImage(filePath, "", 128, "", false, false, "", false, 0)
+		if err != nil {
+			t.Fatalf("processImage failed for %s: %v", filePath, err)
+		}
+		outFileName := filepath.Base(destPath)
+		targetDir := filepath.Dir(destPath)
+
+		data, ok := dirZips[targetDir]
+		if !ok {
+			var suffixName string
+			absSrcDir, err := filepath.Abs(filepath.Dir(filePath))
+			if err != nil {
+				absSrcDir = filepath.Dir(filePath)
+			}
+			rel, err := filepath.Rel(absTopLevelInDir, absSrcDir)
+			if err != nil || rel == "." || rel == "" {
+				suffixName = filepath.Base(absTopLevelInDir)
+			} else {
+				relClean := filepath.Clean(rel)
+				relClean = strings.ReplaceAll(relClean, "\\", "_")
+				relClean = strings.ReplaceAll(relClean, "/", "_")
+				suffixName = relClean
+			}
+			suffixName = sanitizeFileName(suffixName)
+
+			data = &dirZipData{
+				suffixName: suffixName,
+			}
+			dirZips[targetDir] = data
+		}
+
+		item := zipItem{
+			absPath:  destPath,
+			fileName: outFileName,
+		}
+		data.items = append(data.items, item)
+		allZipItems = append(allZipItems, item)
+
+		entry := MisskeyEmojiEntry{
+			FileName:   outFileName,
+			Downloaded: true,
+			Emoji: MisskeyEmojiInfo{
+				Name: "test",
+			},
+		}
+		data.entries = append(data.entries, entry)
+		allEmojiEntries = append(allEmojiEntries, entry)
+	}
+
+	// Create local emojis.zip (with suffix) for each directory in topLevelOutDir
+	for _, data := range dirZips {
+		if err := os.MkdirAll(topLevelOutDir, 0755); err != nil {
+			t.Fatalf("failed to create topLevelOutDir: %v", err)
+		}
+		zipPath := filepath.Join(topLevelOutDir, "emoji_"+data.suffixName+".zip")
+		err = createEmojiZip(zipPath, data.items, data.entries)
+		if err != nil {
+			t.Fatalf("createEmojiZip failed for local: %v", err)
+		}
+		if _, err := os.Stat(zipPath); os.IsNotExist(err) {
+			t.Errorf("expected local emojis.zip to exist at %s, but it does not", zipPath)
+		}
+	}
+
+	// Create top-level allemoji.zip
+	if err := os.MkdirAll(topLevelOutDir, 0755); err != nil {
+		t.Fatalf("failed to create topLevelOutDir: %v", err)
+	}
+	allemojiPath := filepath.Join(topLevelOutDir, "allemoji.zip")
+	err = createEmojiZip(allemojiPath, allZipItems, allEmojiEntries)
+	if err != nil {
+		t.Fatalf("createEmojiZip failed for allemoji: %v", err)
+	}
+
+	// Check if allemoji.zip exists
+	if _, err := os.Stat(allemojiPath); os.IsNotExist(err) {
+		t.Errorf("expected allemoji.zip to exist at %s, but it does not", allemojiPath)
+	}
+
+	// Verify that the specific files are created
+	sub1Zip := filepath.Join(topLevelOutDir, "emoji_sub1.zip")
+	sub2Zip := filepath.Join(topLevelOutDir, "emoji_sub1_sub2.zip")
+	if _, err := os.Stat(sub1Zip); os.IsNotExist(err) {
+		t.Errorf("expected emoji_sub1.zip to exist, but it does not")
+	}
+	if _, err := os.Stat(sub2Zip); os.IsNotExist(err) {
+		t.Errorf("expected emoji_sub1_sub2.zip to exist, but it does not")
 	}
 }

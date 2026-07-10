@@ -12,6 +12,7 @@ import (
 	"image/png"
 	"io"
 	"os"
+	"sort"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -51,6 +52,12 @@ type MisskeyMeta struct {
 type zipItem struct {
 	absPath  string
 	fileName string
+}
+
+type dirZipData struct {
+	suffixName string
+	items      []zipItem
+	entries    []MisskeyEmojiEntry
 }
 
 type AutoRectValue struct {
@@ -213,9 +220,41 @@ func main() {
 		}
 	}
 
-	var firstOutDir string
-	var zipItems []zipItem
-	var emojiEntries []MisskeyEmojiEntry
+	var topLevelInDir string
+	if len(args) > 0 {
+		topLevelInDir = args[0]
+	} else {
+		topLevelInDir = "."
+	}
+	absTopLevelInDir, err := filepath.Abs(topLevelInDir)
+	if err != nil {
+		fmt.Printf("Warning: failed to resolve absolute path for top-level input directory: %v\n", err)
+		absTopLevelInDir = topLevelInDir
+	}
+
+	var topLevelOutDir string
+	if outDir != "" {
+		topLevelOutDir = absOutDir
+	} else if len(args) > 0 {
+		arg0 := args[0]
+		info, err := os.Stat(arg0)
+		if err == nil {
+			if info.IsDir() {
+				topLevelOutDir = filepath.Join(arg0, "output")
+			} else {
+				topLevelOutDir = filepath.Join(filepath.Dir(arg0), "output")
+			}
+		}
+	}
+	if topLevelOutDir != "" {
+		topLevelOutDir = filepath.Clean(topLevelOutDir)
+	} else {
+		topLevelOutDir = "output"
+	}
+
+	dirZips := make(map[string]*dirZipData)
+	var allZipItems []zipItem
+	var allEmojiEntries []MisskeyEmojiEntry
 
 	successCount := 0
 	failureCount := 0
@@ -270,14 +309,39 @@ func main() {
 			successCount++
 
 			if zipMode {
-				if firstOutDir == "" {
-					firstOutDir = filepath.Dir(destPath)
-				}
 				outFileName := filepath.Base(destPath)
-				zipItems = append(zipItems, zipItem{
+				targetDir := filepath.Dir(destPath)
+
+				data, ok := dirZips[targetDir]
+				if !ok {
+					var suffixName string
+					absSrcDir, err := filepath.Abs(filepath.Dir(filePath))
+					if err != nil {
+						absSrcDir = filepath.Dir(filePath)
+					}
+					rel, err := filepath.Rel(absTopLevelInDir, absSrcDir)
+					if err != nil || rel == "." || rel == "" {
+						suffixName = filepath.Base(absTopLevelInDir)
+					} else {
+						relClean := filepath.Clean(rel)
+						relClean = strings.ReplaceAll(relClean, "\\", "_")
+						relClean = strings.ReplaceAll(relClean, "/", "_")
+						suffixName = relClean
+					}
+					suffixName = sanitizeFileName(suffixName)
+
+					data = &dirZipData{
+						suffixName: suffixName,
+					}
+					dirZips[targetDir] = data
+				}
+
+				item := zipItem{
 					absPath:  destPath,
 					fileName: outFileName,
-				})
+				}
+				data.items = append(data.items, item)
+				allZipItems = append(allZipItems, item)
 
 				aliases := []string{}
 				if hasPronunciation {
@@ -302,25 +366,63 @@ func main() {
 				if license != "" {
 					entry.Emoji.License = license
 				}
-				emojiEntries = append(emojiEntries, entry)
+				data.entries = append(data.entries, entry)
+				allEmojiEntries = append(allEmojiEntries, entry)
 			}
 		}
 	}
 
 	if zipMode && successCount > 0 {
-		var zipPath string
-		if firstOutDir != "" {
-			zipPath = filepath.Join(firstOutDir, "emojis.zip")
-		} else {
-			zipPath = "emojis.zip"
+		// 1. Create local emojis.zip for each output directory
+		var targetDirs []string
+		for k := range dirZips {
+			targetDirs = append(targetDirs, k)
 		}
-		fmt.Printf("Creating ZIP archive at %s ... ", zipPath)
-		err := createEmojiZip(zipPath, zipItems, emojiEntries)
-		if err != nil {
-			fmt.Printf("Failed: %v\n", err)
-			os.Exit(1)
-		} else {
-			fmt.Println("Success")
+		sort.Strings(targetDirs)
+
+		for _, targetDir := range targetDirs {
+			data := dirZips[targetDir]
+			var zipPath string
+			if recursive {
+				if err := os.MkdirAll(topLevelOutDir, 0755); err != nil {
+					fmt.Printf("Failed to create top-level output directory: %v\n", err)
+					os.Exit(1)
+				}
+				zipPath = filepath.Join(topLevelOutDir, "emoji_"+data.suffixName+".zip")
+			} else {
+				if err := os.MkdirAll(targetDir, 0755); err != nil {
+					fmt.Printf("Failed to create directory %s: %v\n", targetDir, err)
+					os.Exit(1)
+				}
+				zipPath = filepath.Join(targetDir, "emojis.zip")
+			}
+			displayZipPath := filepath.Clean(zipPath)
+			fmt.Printf("Creating ZIP archive at %s ... ", displayZipPath)
+			err := createEmojiZip(zipPath, data.items, data.entries)
+			if err != nil {
+				fmt.Printf("Failed: %v\n", err)
+				os.Exit(1)
+			} else {
+				fmt.Println("Success")
+			}
+		}
+
+		// 2. If recursive, also create a top-level allemoji.zip containing all emojis
+		if recursive {
+			if err := os.MkdirAll(topLevelOutDir, 0755); err != nil {
+				fmt.Printf("Failed to create top-level output directory: %v\n", err)
+				os.Exit(1)
+			}
+			zipPath := filepath.Join(topLevelOutDir, "allemoji.zip")
+			displayZipPath := filepath.Clean(zipPath)
+			fmt.Printf("Creating ZIP archive at %s ... ", displayZipPath)
+			err := createEmojiZip(zipPath, allZipItems, allEmojiEntries)
+			if err != nil {
+				fmt.Printf("Failed: %v\n", err)
+				os.Exit(1)
+			} else {
+				fmt.Println("Success")
+			}
 		}
 	}
 
@@ -856,4 +958,20 @@ func isPureHiraganaOrSafe(s string) bool {
 		return false
 	}
 	return true
+}
+
+func sanitizeFileName(s string) string {
+	var sb strings.Builder
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-' {
+			sb.WriteRune(r)
+		} else {
+			sb.WriteRune('_')
+		}
+	}
+	res := sb.String()
+	for strings.Contains(res, "__") {
+		res = strings.ReplaceAll(res, "__", "_")
+	}
+	return strings.Trim(res, "_")
 }
