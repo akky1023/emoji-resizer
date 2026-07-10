@@ -387,12 +387,14 @@ func TestRecursiveZipMode(t *testing.T) {
 		allEmojiEntries = append(allEmojiEntries, entry)
 	}
 
+	categoryPrefix := "testcat"
+
 	// Create local emojis.zip (with suffix) for each directory in topLevelOutDir
 	for _, data := range dirZips {
 		if err := os.MkdirAll(topLevelOutDir, 0755); err != nil {
 			t.Fatalf("failed to create topLevelOutDir: %v", err)
 		}
-		zipPath := filepath.Join(topLevelOutDir, "emoji_"+data.suffixName+".zip")
+		zipPath := filepath.Join(topLevelOutDir, categoryPrefix+"_"+data.suffixName+".zip")
 		err = createEmojiZip(zipPath, data.items, data.entries)
 		if err != nil {
 			t.Fatalf("createEmojiZip failed for local: %v", err)
@@ -402,28 +404,28 @@ func TestRecursiveZipMode(t *testing.T) {
 		}
 	}
 
-	// Create top-level allemoji.zip
+	// Create top-level testcat_all.zip
 	if err := os.MkdirAll(topLevelOutDir, 0755); err != nil {
 		t.Fatalf("failed to create topLevelOutDir: %v", err)
 	}
-	allemojiPath := filepath.Join(topLevelOutDir, "allemoji.zip")
+	allemojiPath := filepath.Join(topLevelOutDir, categoryPrefix+"_all.zip")
 	err = createEmojiZip(allemojiPath, allZipItems, allEmojiEntries)
 	if err != nil {
 		t.Fatalf("createEmojiZip failed for allemoji: %v", err)
 	}
 
-	// Check if allemoji.zip exists
+	// Check if testcat_all.zip exists
 	if _, err := os.Stat(allemojiPath); os.IsNotExist(err) {
-		t.Errorf("expected allemoji.zip to exist at %s, but it does not", allemojiPath)
+		t.Errorf("expected testcat_all.zip to exist at %s, but it does not", allemojiPath)
 	}
 
 	// Verify that the specific files are created
-	sub1Zip := filepath.Join(topLevelOutDir, "emoji_sub1.zip")
-	sub2Zip := filepath.Join(topLevelOutDir, "emoji_sub1_sub2.zip")
+	sub1Zip := filepath.Join(topLevelOutDir, "testcat_sub1.zip")
+	sub2Zip := filepath.Join(topLevelOutDir, "testcat_sub1_sub2.zip")
 	if _, err := os.Stat(sub1Zip); os.IsNotExist(err) {
-		t.Errorf("expected emoji_sub1.zip to exist, but it does not")
+		t.Errorf("expected testcat_sub1.zip to exist, but it does not")
 	}
 	if _, err := os.Stat(sub2Zip); os.IsNotExist(err) {
-		t.Errorf("expected emoji_sub1_sub2.zip to exist, but it does not")
+		t.Errorf("expected testcat_sub1_sub2.zip to exist, but it does not")
 	}
 }

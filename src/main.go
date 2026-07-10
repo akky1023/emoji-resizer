@@ -373,6 +373,14 @@ func main() {
 	}
 
 	if zipMode && successCount > 0 {
+		categoryPrefix := "emoji"
+		if category != "" {
+			categoryPrefix = sanitizeFileName(category)
+			if categoryPrefix == "" {
+				categoryPrefix = "emoji"
+			}
+		}
+
 		// 1. Create local emojis.zip for each output directory
 		var targetDirs []string
 		for k := range dirZips {
@@ -388,13 +396,13 @@ func main() {
 					fmt.Printf("Failed to create top-level output directory: %v\n", err)
 					os.Exit(1)
 				}
-				zipPath = filepath.Join(topLevelOutDir, "emoji_"+data.suffixName+".zip")
+				zipPath = filepath.Join(topLevelOutDir, categoryPrefix+"_"+data.suffixName+".zip")
 			} else {
 				if err := os.MkdirAll(targetDir, 0755); err != nil {
 					fmt.Printf("Failed to create directory %s: %v\n", targetDir, err)
 					os.Exit(1)
 				}
-				zipPath = filepath.Join(targetDir, "emojis.zip")
+				zipPath = filepath.Join(targetDir, categoryPrefix+".zip")
 			}
 			displayZipPath := filepath.Clean(zipPath)
 			fmt.Printf("Creating ZIP archive at %s ... ", displayZipPath)
@@ -413,7 +421,7 @@ func main() {
 				fmt.Printf("Failed to create top-level output directory: %v\n", err)
 				os.Exit(1)
 			}
-			zipPath := filepath.Join(topLevelOutDir, "allemoji.zip")
+			zipPath := filepath.Join(topLevelOutDir, categoryPrefix+"_all.zip")
 			displayZipPath := filepath.Clean(zipPath)
 			fmt.Printf("Creating ZIP archive at %s ... ", displayZipPath)
 			err := createEmojiZip(zipPath, allZipItems, allEmojiEntries)
