@@ -666,6 +666,17 @@ var romajiMap = map[string]struct{ Kunrei, Hepburn string }{
 	"りゃ": {"rya", "rya"}, "りゅ": {"ryu", "ryu"}, "りょ": {"ryo", "ryo"},
 	"ふぁ": {"fa", "fa"},   "ふぃ": {"fi", "fi"},   "ふぇ": {"fe", "fe"},   "ふぉ": {"fo", "fo"},
 	"ゔぁ": {"va", "va"},   "ゔぃ": {"vi", "vi"},   "ゔぇ": {"ve", "ve"},   "ゔぉ": {"vo", "vo"},
+	"ちぇ": {"tye", "che"}, "しぇ": {"sye", "she"}, "じぇ": {"zye", "je"},
+	"てぃ": {"thi", "thi"}, "でぃ": {"dhi", "dhi"},
+	"てゅ": {"thu", "thu"}, "でゅ": {"dhu", "dhu"},
+	"とぅ": {"twu", "twu"}, "どぅ": {"dwu", "dwu"},
+	"つぁ": {"tsa", "tsa"}, "つぃ": {"tsi", "tsi"}, "つぇ": {"tse", "tse"}, "つぉ": {"tso", "tso"},
+	"うぃ": {"wi", "wi"}, "うぇ": {"we", "we"}, "うぉ": {"wo", "wo"},
+	"いぇ": {"ye", "ye"},
+	"ふゃ": {"fya", "fya"}, "ふゅ": {"fyu", "fyu"}, "ふょ": {"fyo", "fyo"},
+	"ゔゃ": {"vya", "vya"}, "ゔゅ": {"vyu", "vyu"}, "ゔょ": {"vyo", "vyo"},
+	"くぁ": {"kwa", "kwa"}, "くぃ": {"kwi", "kwi"}, "くぇ": {"kwe", "kwe"}, "くぉ": {"kwo", "kwo"},
+	"ぐぁ": {"gwa", "gwa"}, "ぐぃ": {"gwi", "gwi"}, "ぐぇ": {"gwe", "gwe"}, "ぐぉ": {"gwo", "gwo"},
 
 	"あ": {"a", "a"}, "い": {"i", "i"}, "う": {"u", "u"}, "え": {"e", "e"}, "お": {"o", "o"},
 	"か": {"ka", "ka"}, "き": {"ki", "ki"}, "く": {"ku", "ku"}, "け": {"ke", "ke"}, "こ": {"ko", "ko"},
@@ -684,6 +695,11 @@ var romajiMap = map[string]struct{ Kunrei, Hepburn string }{
 	"わ": {"wa", "wa"}, "を": {"o", "wo"}, "ん": {"n", "n"},
 	"ゔ": {"vu", "vu"},
 	"ゐ": {"i", "i"}, "ゑ": {"e", "e"},
+	"ぁ": {"la", "la"}, "ぃ": {"li", "li"}, "ぅ": {"lu", "lu"}, "ぇ": {"le", "le"}, "ぉ": {"lo", "lo"},
+	"ゃ": {"lya", "lya"}, "ゅ": {"lyu", "lyu"}, "ょ": {"lyo", "lyo"},
+	"っ": {"ltu", "ltu"},
+	"ゎ": {"lwa", "lwa"},
+	"ゕ": {"lka", "lka"}, "ゖ": {"lke", "lke"},
 }
 
 func hiraganaToRomaji(input string) (kunrei string, hepburn string) {
@@ -697,6 +713,7 @@ func hiraganaToRomaji(input string) (kunrei string, hepburn string) {
 
 	for i < n {
 		if runes[i] == 'っ' {
+			doubled := false
 			if i+1 < n {
 				nextRune := runes[i+1]
 				nextStr := string(nextRune)
@@ -706,17 +723,26 @@ func hiraganaToRomaji(input string) (kunrei string, hepburn string) {
 
 				kNext, hNext := lookupRomaji(nextStr)
 
-				if len(kNext) > 0 && isConsonant(kNext[0]) {
+				kConsonant := len(kNext) > 0 && isConsonant(kNext[0])
+				hConsonant := len(hNext) > 0 && isConsonant(hNext[0])
+
+				if kConsonant {
 					kResult.WriteByte(kNext[0])
 				}
-
-				if len(hNext) > 0 && isConsonant(hNext[0]) {
+				if hConsonant {
 					if strings.HasPrefix(hNext, "ch") {
 						hResult.WriteByte('t')
 					} else {
 						hResult.WriteByte(hNext[0])
 					}
 				}
+				if kConsonant || hConsonant {
+					doubled = true
+				}
+			}
+			if !doubled {
+				kResult.WriteString("ltu")
+				hResult.WriteString("ltu")
 			}
 			i++
 			continue

@@ -130,6 +130,23 @@ func TestRomajiConversion(t *testing.T) {
 		{"しゃしん", "syasin", "shashin"},
 		{"かんじ", "kanzi", "kanji"},
 		{"てすと_123", "tesuto_123", "tesuto_123"},
+		{"ぃ", "li", "li"},
+		{"ぁ", "la", "la"},
+		{"がっ", "galtu", "galtu"},
+		{"ふぃっしゅ", "fissyu", "fisshu"},
+		{"ぇ", "le", "le"},
+		{"ヶ", "lke", "lke"},
+		{"ヵ", "lka", "lka"},
+		{"てぃ", "thi", "thi"},
+		{"でぃ", "dhi", "dhi"},
+		{"とぅ", "twu", "twu"},
+		{"どぅ", "dwu", "dwu"},
+		{"てゅ", "thu", "thu"},
+		{"でゅ", "dhu", "dhu"},
+		{"うぃ", "wi", "wi"},
+		{"ちぇ", "tye", "che"},
+		{"しぇ", "sye", "she"},
+		{"じぇ", "zye", "je"},
 	}
 
 	for _, tc := range tests {
