@@ -67,22 +67,20 @@ func createEmojiZip(zipPath string, items []zipItem, entries []MisskeyEmojiEntry
 	defer archive.Close()
 
 	// 1. Create meta.json
+	metaFileWriter, err := archive.Create("meta.json")
+	if err != nil {
+		return fmt.Errorf("failed to create meta.json in zip: %w", err)
+	}
+
 	meta := MisskeyMeta{
 		MetaVersion: 2,
 		ExportedAt:  time.Now().UTC().Format(time.RFC3339),
 		Emojis:      entries,
 	}
-	metaBytes, err := json.MarshalIndent(meta, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal meta.json: %w", err)
-	}
-
-	metaFileWriter, err := archive.Create("meta.json")
-	if err != nil {
-		return fmt.Errorf("failed to create meta.json in zip: %w", err)
-	}
-	if _, err := metaFileWriter.Write(metaBytes); err != nil {
-		return fmt.Errorf("failed to write meta.json to zip: %w", err)
+	enc := json.NewEncoder(metaFileWriter)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(meta); err != nil {
+		return fmt.Errorf("failed to encode and write meta.json: %w", err)
 	}
 
 	// 2. Add each image
