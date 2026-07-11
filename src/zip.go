@@ -87,26 +87,32 @@ func createEmojiZip(zipPath string, items []zipItem, entries []MisskeyEmojiEntry
 
 	// 2. Add each image
 	for _, item := range items {
-		imgFile, err := os.Open(item.absPath)
-		if err != nil {
-			return fmt.Errorf("failed to open processed image %s: %w", item.absPath, err)
+		if err := addFileToZip(archive, item); err != nil {
+			return err
 		}
-
-		imgFileWriter, err := archive.Create(item.fileName)
-		if err != nil {
-			imgFile.Close()
-			return fmt.Errorf("failed to create file %s in zip: %w", item.fileName, err)
-		}
-
-		if _, err := io.Copy(imgFileWriter, imgFile); err != nil {
-			imgFile.Close()
-			return fmt.Errorf("failed to copy file %s to zip: %w", item.fileName, err)
-		}
-		imgFile.Close()
 	}
 
 	if closeErr := archive.Close(); closeErr != nil {
 		return fmt.Errorf("failed to close zip archive: %w", closeErr)
+	}
+
+	return nil
+}
+
+func addFileToZip(archive *zip.Writer, item zipItem) error {
+	imgFile, err := os.Open(item.absPath)
+	if err != nil {
+		return fmt.Errorf("failed to open processed image %s: %w", item.absPath, err)
+	}
+	defer imgFile.Close()
+
+	imgFileWriter, err := archive.Create(item.fileName)
+	if err != nil {
+		return fmt.Errorf("failed to create file %s in zip: %w", item.fileName, err)
+	}
+
+	if _, err := io.Copy(imgFileWriter, imgFile); err != nil {
+		return fmt.Errorf("failed to copy file %s to zip: %w", item.fileName, err)
 	}
 
 	return nil
