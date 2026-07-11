@@ -486,3 +486,209 @@ func TestProcessImageSkipExist(t *testing.T) {
 		t.Errorf("file was overwritten: expected 'dummy modified content', got %q", string(content))
 	}
 }
+
+func TestNamePrefixSuffixZipMode(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "emoji-resizer-prefix-suffix-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Create dummy image with Japanese name "ねこ.png"
+	img := image.NewRGBA(image.Rect(0, 0, 10, 10))
+	imgName := "ねこ.png"
+	imgPath := filepath.Join(tmpDir, imgName)
+	f, err := os.Create(imgPath)
+	if err != nil {
+		t.Fatalf("failed to create source image: %v", err)
+	}
+	if err := png.Encode(f, img); err != nil {
+		f.Close()
+		t.Fatalf("failed to encode source image: %v", err)
+	}
+	f.Close()
+
+	// Settings for the prefix and suffix
+	namePrefix := "pref_"
+	nameSuffix := "_suf"
+
+	// Mimic the main.go processing logic for zipMode
+	ext := filepath.Ext(imgPath)
+	base := strings.TrimSuffix(filepath.Base(imgPath), ext)
+
+	var name, hiragana, katakana, hepburn string
+	var hasPronunciation bool
+
+	if isPureHiraganaOrSafe(base) {
+		hiragana = base
+		katakana = hiraganaToKatakana(hiragana)
+		var hepburnRaw string
+		name, hepburnRaw = hiraganaToRomaji(hiragana)
+		name = strings.ToLower(name)
+		hepburn = strings.ToLower(hepburnRaw)
+		hasPronunciation = true
+	} else {
+		t.Fatalf("expected 'ねこ' to be pure hiragana")
+	}
+
+	customBase := namePrefix + name + nameSuffix
+
+	// Run processImage
+	destPath, _, err := processImage(imgPath, tmpDir, 128, "", false, false, customBase, false, 0, false)
+	if err != nil {
+		t.Fatalf("processImage failed: %v", err)
+	}
+
+	outFileName := filepath.Base(destPath)
+	expectedFileName := "pref_neko_suf.png"
+	if outFileName != expectedFileName {
+		t.Errorf("expected file name %q, got %q", expectedFileName, outFileName)
+	}
+
+	aliases := []string{}
+	if hasPronunciation {
+		aliases = addUnique(aliases, hiragana)
+		aliases = addUnique(aliases, katakana)
+		if name != hepburn {
+			aliases = addUnique(aliases, hepburn)
+		}
+	}
+
+	entry := MisskeyEmojiEntry{
+		FileName:   outFileName,
+		Downloaded: true,
+		Emoji: MisskeyEmojiInfo{
+			Name:    namePrefix + name + nameSuffix,
+			Aliases: aliases,
+		},
+	}
+
+	expectedName := "pref_neko_suf"
+	if entry.Emoji.Name != expectedName {
+		t.Errorf("expected emoji name %q, got %q", expectedName, entry.Emoji.Name)
+	}
+
+	if len(entry.Emoji.Aliases) != 2 {
+		t.Errorf("expected 2 aliases, got %d", len(entry.Emoji.Aliases))
+	}
+	expectedAliases := []string{"ねこ", "ネコ"}
+	for i, alias := range expectedAliases {
+		if i < len(entry.Emoji.Aliases) && entry.Emoji.Aliases[i] != alias {
+			t.Errorf("expected alias %q, got %q", alias, entry.Emoji.Aliases[i])
+		}
+	}
+}
+
+func TestParseAndApplyConfig(t *testing.T) {
+	// Create temporary directory and configuration file
+	tmpDir, err := os.MkdirTemp("", "emoji-resizer-config-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	configContent := `{
+		"size": 256,
+		"out": "config_output",
+		"suffix": "_configured",
+		"name_prefix": "conf_pref_",
+		"name_suffix": "_conf_suf",
+		"r": true,
+		"no_resize": true,
+		"rect": true,
+		"zip": true,
+		"skip": true,
+		"category": "ConfigCat",
+		"license": "ConfigLic",
+		"auto_rect": 2.5
+	}`
+
+	cfgPath := filepath.Join(tmpDir, "config.json")
+	if err := os.WriteFile(cfgPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	// 1. Test standard parsing and application (no seen flags)
+	size := 128
+	outDir := ""
+	suffix := ""
+	namePrefix := ""
+	nameSuffix := ""
+	recursive := false
+	noResize := false
+	rect := false
+	zipMode := false
+	skip := false
+	var autoRect AutoRectValue
+	var cfgCategory string
+	var cfgLicense string
+
+	seenFlags := make(map[string]bool)
+
+	err = parseAndApplyConfig(cfgPath, seenFlags, &size, &outDir, &suffix, &namePrefix, &nameSuffix, &recursive, &noResize, &rect, &zipMode, &skip, &autoRect, &cfgCategory, &cfgLicense)
+	if err != nil {
+		t.Fatalf("parseAndApplyConfig failed: %v", err)
+	}
+
+	if size != 256 {
+		t.Errorf("expected size 256, got %d", size)
+	}
+	if outDir != "config_output" {
+		t.Errorf("expected outDir 'config_output', got %q", outDir)
+	}
+	if suffix != "_configured" {
+		t.Errorf("expected suffix '_configured', got %q", suffix)
+	}
+	if namePrefix != "conf_pref_" {
+		t.Errorf("expected namePrefix 'conf_pref_', got %q", namePrefix)
+	}
+	if nameSuffix != "_conf_suf" {
+		t.Errorf("expected nameSuffix '_conf_suf', got %q", nameSuffix)
+	}
+	if !recursive {
+		t.Errorf("expected recursive to be true")
+	}
+	if !noResize {
+		t.Errorf("expected noResize to be true")
+	}
+	if !rect {
+		t.Errorf("expected rect to be true")
+	}
+	if !zipMode {
+		t.Errorf("expected zipMode to be true")
+	}
+	if !skip {
+		t.Errorf("expected skip to be true")
+	}
+	if cfgCategory != "ConfigCat" {
+		t.Errorf("expected cfgCategory 'ConfigCat', got %q", cfgCategory)
+	}
+	if cfgLicense != "ConfigLic" {
+		t.Errorf("expected cfgLicense 'ConfigLic', got %q", cfgLicense)
+	}
+	if !autoRect.Active || autoRect.Ratio != 2.5 {
+		t.Errorf("expected autoRect to be active and 2.5, got Active=%t, Ratio=%f", autoRect.Active, autoRect.Ratio)
+	}
+
+	// 2. Test seen flags override (CLI args should override config settings)
+	// Reset variables
+	size = 128
+	outDir = ""
+	seenFlags = map[string]bool{
+		"size": true,
+		"out":  true,
+	}
+
+	err = parseAndApplyConfig(cfgPath, seenFlags, &size, &outDir, &suffix, &namePrefix, &nameSuffix, &recursive, &noResize, &rect, &zipMode, &skip, &autoRect, &cfgCategory, &cfgLicense)
+	if err != nil {
+		t.Fatalf("parseAndApplyConfig override run failed: %v", err)
+	}
+
+	// size and outDir should remain at 128 and "" (not overridden by config because they are in seenFlags)
+	if size != 128 {
+		t.Errorf("expected size 128 (not overridden by config), got %d", size)
+	}
+	if outDir != "" {
+		t.Errorf("expected outDir '' (not overridden by config), got %q", outDir)
+	}
+}

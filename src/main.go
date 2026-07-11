@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -49,11 +50,30 @@ func (a *AutoRectValue) IsBoolFlag() bool {
 	return true
 }
 
+type Config struct {
+	Size        *int        `json:"size"`
+	OutDir      *string     `json:"out"`
+	Suffix      *string     `json:"suffix"`
+	NamePrefix  *string     `json:"name_prefix"`
+	NameSuffix  *string     `json:"name_suffix"`
+	Recursive   *bool       `json:"r"`
+	NoResize    *bool       `json:"no_resize"`
+	Rect        *bool       `json:"rect"`
+	ZipMode     *bool       `json:"zip"`
+	AutoRect    interface{} `json:"auto_rect"`
+	Skip        *bool       `json:"skip"`
+	Category    *string     `json:"category"`
+	License     *string     `json:"license"`
+}
+
 func main() {
 	var (
 		size        int
 		outDir      string
 		suffix      string
+		namePrefix  string
+		nameSuffix  string
+		configPath  string
 		recursive   bool
 		noResize    bool
 		rect        bool
@@ -66,6 +86,9 @@ func main() {
 	flag.IntVar(&size, "size", 128, "target resize square size in pixels")
 	flag.StringVar(&outDir, "out", "", "custom output directory path (default: 'output' directory inside the source file's directory)")
 	flag.StringVar(&suffix, "suffix", "", "suffix to append to the output filename (e.g. '_resized')")
+	flag.StringVar(&namePrefix, "name-prefix", "", "prefix to prepend to the emoji name")
+	flag.StringVar(&nameSuffix, "name-suffix", "", "suffix to append to the emoji name")
+	flag.StringVar(&configPath, "config", "", "path to config file (default: './config.json' if exists)")
 	flag.BoolVar(&recursive, "r", false, "recursively scan directories")
 	flag.BoolVar(&noResize, "no-resize", false, "skip final resizing and keep the original square dimensions")
 	flag.BoolVar(&rect, "rect", false, "resize rectangle keeping aspect ratio, short side matches target size (no padding)")
@@ -78,6 +101,19 @@ func main() {
 	if showVersion {
 		fmt.Printf("emoji-resizer %s\n", version)
 		return
+	}
+
+	seenFlags := make(map[string]bool)
+	flag.Visit(func(f *flag.Flag) {
+		seenFlags[f.Name] = true
+	})
+
+	var cfgCategory string
+	var cfgLicense string
+
+	if err := parseAndApplyConfig(configPath, seenFlags, &size, &outDir, &suffix, &namePrefix, &nameSuffix, &recursive, &noResize, &rect, &zipMode, &skip, &autoRect, &cfgCategory, &cfgLicense); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
 	}
 
 	if size < 8 || size > 8192 {
@@ -106,16 +142,24 @@ func main() {
 	var license string
 	if zipMode {
 		reader := bufio.NewReader(os.Stdin)
-		fmt.Print("emoji.category を入力してください (スキップするにはEnter): ")
-		catInput, err := reader.ReadString('\n')
-		if err == nil {
-			category = strings.TrimSpace(catInput)
+		if cfgCategory != "" {
+			category = cfgCategory
+		} else {
+			fmt.Print("emoji.category を入力してください (スキップするにはEnter): ")
+			catInput, err := reader.ReadString('\n')
+			if err == nil {
+				category = strings.TrimSpace(catInput)
+			}
 		}
 
-		fmt.Print("emoji.license を入力してください (スキップするにはEnter): ")
-		licInput, err := reader.ReadString('\n')
-		if err == nil {
-			license = strings.TrimSpace(licInput)
+		if cfgLicense != "" {
+			license = cfgLicense
+		} else {
+			fmt.Print("emoji.license を入力してください (スキップするにはEnter): ")
+			licInput, err := reader.ReadString('\n')
+			if err == nil {
+				license = strings.TrimSpace(licInput)
+			}
 		}
 	}
 
@@ -260,7 +304,11 @@ func main() {
 			} else {
 				name = strings.ToLower(base)
 			}
-			customBase = name
+			customBase = namePrefix + name + nameSuffix
+		} else {
+			ext := filepath.Ext(filePath)
+			base := strings.TrimSuffix(filepath.Base(filePath), ext)
+			customBase = namePrefix + base + nameSuffix
 		}
 
 		destPath, skipped, err := processImage(filePath, outDir, size, suffix, noResize, rect, customBase, autoRect.Active, autoRect.Ratio, skip)
@@ -323,7 +371,7 @@ func main() {
 					FileName:   outFileName,
 					Downloaded: true,
 					Emoji: MisskeyEmojiInfo{
-						Name:    name,
+						Name:    namePrefix + name + nameSuffix,
 						Aliases: aliases,
 					},
 				}
@@ -405,4 +453,94 @@ func main() {
 	if failureCount > 0 {
 		os.Exit(1)
 	}
+}
+
+func parseAndApplyConfig(configPath string, seenFlags map[string]bool,
+	size *int, outDir *string, suffix *string, namePrefix *string, nameSuffix *string,
+	recursive *bool, noResize *bool, rect *bool, zipMode *bool, skip *bool,
+	autoRect *AutoRectValue, cfgCategory *string, cfgLicense *string) error {
+
+	var shouldLoadConfig bool
+	var finalConfigPath string
+
+	if configPath != "" {
+		shouldLoadConfig = true
+		finalConfigPath = configPath
+	} else {
+		if _, err := os.Stat("config.json"); err == nil {
+			shouldLoadConfig = true
+			finalConfigPath = "config.json"
+		}
+	}
+
+	if !shouldLoadConfig {
+		return nil
+	}
+
+	cfgFile, err := os.Open(finalConfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to open config file: %w", err)
+	}
+	defer cfgFile.Close()
+
+	var cfg Config
+	decoder := json.NewDecoder(cfgFile)
+	if err := decoder.Decode(&cfg); err != nil {
+		return fmt.Errorf("failed to parse config file: %w", err)
+	}
+
+	if cfg.Size != nil && !seenFlags["size"] {
+		*size = *cfg.Size
+	}
+	if cfg.OutDir != nil && !seenFlags["out"] {
+		*outDir = *cfg.OutDir
+	}
+	if cfg.Suffix != nil && !seenFlags["suffix"] {
+		*suffix = *cfg.Suffix
+	}
+	if cfg.NamePrefix != nil && !seenFlags["name-prefix"] {
+		*namePrefix = *cfg.NamePrefix
+	}
+	if cfg.NameSuffix != nil && !seenFlags["name-suffix"] {
+		*nameSuffix = *cfg.NameSuffix
+	}
+	if cfg.Recursive != nil && !seenFlags["r"] {
+		*recursive = *cfg.Recursive
+	}
+	if cfg.NoResize != nil && !seenFlags["no-resize"] {
+		*noResize = *cfg.NoResize
+	}
+	if cfg.Rect != nil && !seenFlags["rect"] {
+		*rect = *cfg.Rect
+	}
+	if cfg.ZipMode != nil && !seenFlags["zip"] {
+		*zipMode = *cfg.ZipMode
+	}
+	if cfg.Skip != nil && !seenFlags["skip"] {
+		*skip = *cfg.Skip
+	}
+	if cfg.Category != nil {
+		*cfgCategory = *cfg.Category
+	}
+	if cfg.License != nil {
+		*cfgLicense = *cfg.License
+	}
+	if cfg.AutoRect != nil && !seenFlags["auto-rect"] {
+		switch v := cfg.AutoRect.(type) {
+		case bool:
+			autoRect.Active = v
+			autoRect.Ratio = 0
+		case float64:
+			autoRect.Active = true
+			autoRect.Ratio = v
+		case string:
+			if err := autoRect.Set(v); err != nil {
+				return fmt.Errorf("invalid auto_rect in config: %w", err)
+			}
+		default:
+			return fmt.Errorf("invalid type for auto_rect in config")
+		}
+	}
+
+	return nil
 }
