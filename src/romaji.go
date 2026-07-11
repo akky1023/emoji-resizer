@@ -10,7 +10,7 @@ var romajiMap = map[string]struct{ Kunrei, Hepburn string }{
 	"しゃ": {"sya", "sha"}, "しゅ": {"syu", "shu"}, "しょ": {"syo", "sho"},
 	"じゃ": {"zya", "ja"},  "じゅ": {"zyu", "ju"},  "じょ": {"zyo", "jo"},
 	"ちゃ": {"tya", "cha"}, "ちゅ": {"tyu", "chu"}, "ちょ": {"tyo", "cho"},
-	"ぢゃ": {"zya", "ja"},  "ぢゅ": {"zyu", "ju"},  "ぢょ": {"zyo", "jo"},
+	"ぢゃ": {"dya", "dya"}, "ぢゅ": {"dyu", "dyu"}, "ぢょ": {"dyo", "dyo"},
 	"にゃ": {"nya", "nya"}, "にゅ": {"nyu", "nyu"}, "にょ": {"nyo", "nyo"},
 	"ひゃ": {"hya", "hya"}, "ひゅ": {"hyu", "hyu"}, "ひょ": {"hyo", "hyo"},
 	"びゃ": {"bya", "bya"}, "びゅ": {"byu", "byu"}, "びょ": {"byo", "byo"},
@@ -37,7 +37,7 @@ var romajiMap = map[string]struct{ Kunrei, Hepburn string }{
 	"さ": {"sa", "sa"}, "し": {"si", "shi"}, "す": {"su", "su"}, "せ": {"se", "se"}, "そ": {"so", "so"},
 	"ざ": {"za", "za"}, "じ": {"zi", "ji"}, "ず": {"zu", "zu"}, "ぜ": {"ze", "ze"}, "ぞ": {"zo", "zo"},
 	"た": {"ta", "ta"}, "ち": {"ti", "chi"}, "つ": {"tu", "tsu"}, "て": {"te", "te"}, "と": {"to", "to"},
-	"だ": {"da", "da"}, "ぢ": {"zi", "ji"}, "づ": {"zu", "zu"}, "で": {"de", "de"}, "ど": {"do", "do"},
+	"だ": {"da", "da"}, "ぢ": {"di", "di"}, "づ": {"du", "du"}, "で": {"de", "de"}, "ど": {"do", "do"},
 	"な": {"na", "na"}, "に": {"ni", "ni"}, "ぬ": {"nu", "nu"}, "ね": {"ne", "ne"}, "の": {"no", "no"},
 	"は": {"ha", "ha"}, "ひ": {"hi", "hi"}, "ふ": {"hu", "fu"}, "へ": {"he", "he"}, "ほ": {"ho", "ho"},
 	"ば": {"ba", "ba"}, "び": {"bi", "bi"}, "ぶ": {"bu", "bu"}, "べ": {"be", "be"}, "ぼ": {"bo", "bo"},
@@ -45,14 +45,14 @@ var romajiMap = map[string]struct{ Kunrei, Hepburn string }{
 	"ま": {"ma", "ma"}, "み": {"mi", "mi"}, "む": {"mu", "mu"}, "め": {"me", "me"}, "も": {"mo", "mo"},
 	"や": {"ya", "ya"}, "ゆ": {"yu", "yu"}, "よ": {"yo", "yo"},
 	"ら": {"ra", "ra"}, "り": {"ri", "ri"}, "る": {"ru", "ru"}, "れ": {"re", "re"}, "ろ": {"ro", "ro"},
-	"わ": {"wa", "wa"}, "を": {"o", "wo"}, "ん": {"n", "n"},
+	"わ": {"wa", "wa"}, "を": {"wo", "wo"}, "ん": {"n", "n"},
 	"ゔ": {"vu", "vu"},
-	"ゐ": {"i", "i"}, "ゑ": {"e", "e"},
-	"ぁ": {"la", "la"}, "ぃ": {"li", "li"}, "ぅ": {"lu", "lu"}, "ぇ": {"le", "le"}, "ぉ": {"lo", "lo"},
-	"ゃ": {"lya", "lya"}, "ゅ": {"lyu", "lyu"}, "ょ": {"lyo", "lyo"},
-	"っ": {"ltu", "ltu"},
-	"ゎ": {"lwa", "lwa"},
-	"ゕ": {"lka", "lka"}, "ゖ": {"lke", "lke"},
+	"ゐ": {"wyi", "wyi"}, "ゑ": {"wye", "wye"},
+	"ぁ": {"la", "xa"}, "ぃ": {"li", "xi"}, "ぅ": {"lu", "xu"}, "ぇ": {"le", "xe"}, "ぉ": {"lo", "xo"},
+	"ゃ": {"lya", "xya"}, "ゅ": {"lyu", "xyu"}, "ょ": {"lyo", "xyo"},
+	"っ": {"ltu", "xtu"},
+	"ゎ": {"lwa", "xwa"},
+	"ゕ": {"lka", "xka"}, "ゖ": {"lke", "xke"},
 }
 
 func isYoonSuffix(r rune) bool {
@@ -143,8 +143,15 @@ func hiraganaToRomaji(input string) (kunrei string, hepburn string) {
 				}
 			}
 			if !doubled {
-				kResult.WriteString("ltu")
-				hResult.WriteString("ltu")
+				kVal, hVal := lookupRomaji("っ")
+				if kVal == "" {
+					kVal = "ltu"
+				}
+				if hVal == "" {
+					hVal = "ltu"
+				}
+				kResult.WriteString(kVal)
+				hResult.WriteString(hVal)
 			}
 			i++
 			continue
