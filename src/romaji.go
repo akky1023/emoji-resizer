@@ -187,8 +187,10 @@ func lookupRomaji(s string) (string, string) {
 }
 
 func isPureHiraganaOrSafe(s string) bool {
+	hasHiragana := false
 	for _, r := range s {
 		if (r >= 0x3041 && r <= 0x3096) || r == 0x3094 || r == 'ー' {
+			hasHiragana = true
 			continue
 		}
 		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
@@ -196,7 +198,7 @@ func isPureHiraganaOrSafe(s string) bool {
 		}
 		return false
 	}
-	return true
+	return hasHiragana
 }
 
 func sanitizeFileName(s string) string {

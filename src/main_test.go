@@ -206,7 +206,7 @@ func TestIsPureHiraganaOrSafe(t *testing.T) {
 		{"らーめん", true},
 		{"ネコ", false}, // Katakana
 		{"猫", false},  // Kanji
-		{"cat", true},  // English is considered safe too (containsJapanese will be false, so it won't prompt either)
+		{"cat", false}, // Pure English is not hiragana, and should not generate aliases
 	}
 
 	for _, tc := range tests {
