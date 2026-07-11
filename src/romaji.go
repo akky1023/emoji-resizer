@@ -166,6 +166,28 @@ func hiraganaToRomaji(input string) (kunrei string, hepburn string) {
 		}
 
 		charStr := string(runes[i])
+		if charStr == "ん" {
+			kResult.WriteString("n")
+			useM := false
+			if i+1 < n {
+				nextStr := string(runes[i+1])
+				if i+2 < n && isYoonSuffix(runes[i+2]) {
+					nextStr = string(runes[i+1 : i+3])
+				}
+				_, hNext := lookupRomaji(nextStr)
+				if len(hNext) > 0 && (hNext[0] == 'b' || hNext[0] == 'm' || hNext[0] == 'p') {
+					useM = true
+				}
+			}
+			if useM {
+				hResult.WriteString("m")
+			} else {
+				hResult.WriteString("n")
+			}
+			i++
+			continue
+		}
+
 		if val, ok := romajiMap[charStr]; ok {
 			kResult.WriteString(val.Kunrei)
 			hResult.WriteString(val.Hepburn)

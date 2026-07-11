@@ -124,7 +124,8 @@ func TestRomajiConversion(t *testing.T) {
 	}{
 		{"ねこ", "neko", "neko"},
 		{"ネコ", "neko", "neko"},
-		{"しんぶん", "sinbun", "shinbun"},
+		{"しんぶん", "sinbun", "shimbun"},
+		{"てんぷら", "tenpura", "tempura"},
 		{"がっこう", "gakkou", "gakkou"},
 		{"まっちゃ", "mattya", "matcha"},
 		{"らーめん", "ramen", "ramen"},
