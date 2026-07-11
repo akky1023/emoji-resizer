@@ -6,6 +6,7 @@ import (
 	"image/gif"
 	"image/jpeg"
 	"image/png"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -287,9 +288,54 @@ func processImage(srcPath string, outDir string, targetSize int, suffix string, 
 		return "", false, fmt.Errorf("failed to close temporary file: %w", err)
 	}
 
-	if err := os.Rename(tmpPath, destPath); err != nil {
+	if err := safeRenameOrCopy(tmpPath, destPath); err != nil {
 		return "", false, fmt.Errorf("failed to rename temporary file to destination: %w", err)
 	}
 
 	return destPath, false, nil
 }
+
+// safeRenameOrCopy moves a file from src to dest. It handles cases where dest already exists
+// (which can fail on Windows via os.Rename) and cases where src and dest are on different
+// filesystems/devices (which fails with EXDEV).
+func safeRenameOrCopy(src, dest string) error {
+	if src == dest {
+		return nil
+	}
+
+	// For Windows: if the destination file exists, remove it first
+	// to prevent os.Rename from failing.
+	if _, err := os.Stat(dest); err == nil {
+		if err := os.Remove(dest); err != nil {
+			return fmt.Errorf("failed to remove existing file: %w", err)
+		}
+	}
+
+	// Try standard rename first
+	err := os.Rename(src, dest)
+	if err == nil {
+		return nil
+	}
+
+	// Fallback to copy if rename failed (e.g. cross-device link EXDEV)
+	srcFile, openErr := os.Open(src)
+	if openErr != nil {
+		return fmt.Errorf("rename failed: %w; fallback open failed: %v", err, openErr)
+	}
+	defer srcFile.Close()
+
+	destFile, createErr := os.Create(dest)
+	if createErr != nil {
+		return fmt.Errorf("rename failed: %w; fallback create failed: %v", err, createErr)
+	}
+	defer destFile.Close()
+
+	if _, copyErr := io.Copy(destFile, srcFile); copyErr != nil {
+		return fmt.Errorf("rename failed: %w; fallback copy failed: %v", err, copyErr)
+	}
+
+	srcFile.Close() // close before removal
+	os.Remove(src)
+	return nil
+}
+
