@@ -52,12 +52,16 @@ func addUnique(slice []string, val string) []string {
 	return append(slice, val)
 }
 
-func createEmojiZip(zipPath string, items []zipItem, entries []MisskeyEmojiEntry) error {
+func createEmojiZip(zipPath string, items []zipItem, entries []MisskeyEmojiEntry) (err error) {
 	zipFile, err := os.Create(zipPath)
 	if err != nil {
 		return fmt.Errorf("failed to create zip file: %w", err)
 	}
-	defer zipFile.Close()
+	defer func() {
+		if closeErr := zipFile.Close(); err == nil && closeErr != nil {
+			err = fmt.Errorf("failed to close zip file: %w", closeErr)
+		}
+	}()
 
 	archive := zip.NewWriter(zipFile)
 	defer archive.Close()
@@ -99,6 +103,10 @@ func createEmojiZip(zipPath string, items []zipItem, entries []MisskeyEmojiEntry
 			return fmt.Errorf("failed to copy file %s to zip: %w", item.fileName, err)
 		}
 		imgFile.Close()
+	}
+
+	if closeErr := archive.Close(); closeErr != nil {
+		return fmt.Errorf("failed to close zip archive: %w", closeErr)
 	}
 
 	return nil
