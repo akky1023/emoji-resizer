@@ -107,12 +107,16 @@ func main() {
 	if zipMode {
 		reader := bufio.NewReader(os.Stdin)
 		fmt.Print("emoji.category を入力してください (スキップするにはEnter): ")
-		catInput, _ := reader.ReadString('\n')
-		category = strings.TrimSpace(catInput)
+		catInput, err := reader.ReadString('\n')
+		if err == nil {
+			category = strings.TrimSpace(catInput)
+		}
 
 		fmt.Print("emoji.license を入力してください (スキップするにはEnter): ")
-		licInput, _ := reader.ReadString('\n')
-		license = strings.TrimSpace(licInput)
+		licInput, err := reader.ReadString('\n')
+		if err == nil {
+			license = strings.TrimSpace(licInput)
+		}
 	}
 
 	// Collect files to process
@@ -237,8 +241,12 @@ func main() {
 			} else if containsJapanese(base) {
 				reader := bufio.NewReader(os.Stdin)
 				fmt.Printf("ファイル名 '%s' のひらがな表記を入力してください (英語などの場合はそのままEnter): ", base)
-				input, _ := reader.ReadString('\n')
-				hiragana = strings.TrimSpace(input)
+				input, err := reader.ReadString('\n')
+				if err == nil {
+					hiragana = strings.TrimSpace(input)
+				} else {
+					hiragana = ""
+				}
 				if hiragana != "" {
 					katakana = hiraganaToKatakana(hiragana)
 					var hepburnRaw string
