@@ -60,6 +60,7 @@ func main() {
 		showVersion bool
 		zipMode     bool
 		autoRect    AutoRectValue
+		skip        bool
 	)
 
 	flag.IntVar(&size, "size", 128, "target resize square size in pixels")
@@ -71,6 +72,7 @@ func main() {
 	flag.BoolVar(&showVersion, "version", false, "show version information and exit")
 	flag.BoolVar(&zipMode, "zip", false, "pack processed images into a Misskey-compatible emoji ZIP file")
 	flag.Var(&autoRect, "auto-rect", "automatically use rect mode if aspect ratio exceeds threshold (defaults to golden ratio ~1.618)")
+	flag.BoolVar(&skip, "skip", false, "skip resizing if the destination file already exists")
 	flag.Parse()
 
 	if showVersion {
@@ -253,12 +255,16 @@ func main() {
 			customBase = name
 		}
 
-		destPath, err := processImage(filePath, outDir, size, suffix, noResize, rect, customBase, autoRect.Active, autoRect.Ratio)
+		destPath, skipped, err := processImage(filePath, outDir, size, suffix, noResize, rect, customBase, autoRect.Active, autoRect.Ratio, skip)
 		if err != nil {
 			fmt.Printf("Failed: %v\n", err)
 			failureCount++
 		} else {
-			fmt.Println("Success")
+			if skipped {
+				fmt.Println("Skipped")
+			} else {
+				fmt.Println("Success")
+			}
 			successCount++
 
 			if zipMode {

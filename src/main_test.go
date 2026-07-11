@@ -36,7 +36,7 @@ func TestProcessImageRect(t *testing.T) {
 	// Target size: 128x128
 	// Output should be a 128x128 square image.
 	outDir1 := filepath.Join(tmpDir, "out1")
-	_, err = processImage(srcPath, outDir1, 128, "", false, false, "", false, 0)
+	_, _, err = processImage(srcPath, outDir1, 128, "", false, false, "", false, 0, false)
 	if err != nil {
 		t.Errorf("processImage (rect=false) failed: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestProcessImageRect(t *testing.T) {
 	// Target size: 128 (short side matches 128)
 	// Since w < h (100 < 200), width (short side) should become 128, and height should scale to 256.
 	outDir2 := filepath.Join(tmpDir, "out2")
-	_, err = processImage(srcPath, outDir2, 128, "", false, true, "", false, 0)
+	_, _, err = processImage(srcPath, outDir2, 128, "", false, true, "", false, 0, false)
 	if err != nil {
 		t.Errorf("processImage (rect=true, vertical) failed: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestProcessImageRect(t *testing.T) {
 	// Target size: 128 (short side matches 128)
 	// Since h3 < w3 (150 < 300), height (short side) should become 128, and width should scale to 256.
 	outDir3 := filepath.Join(tmpDir, "out3")
-	_, err = processImage(srcPath3, outDir3, 128, "", false, true, "", false, 0)
+	_, _, err = processImage(srcPath3, outDir3, 128, "", false, true, "", false, 0, false)
 	if err != nil {
 		t.Errorf("processImage (rect=true, horizontal) failed: %v", err)
 	}
@@ -232,7 +232,7 @@ func TestProcessImageAutoRect(t *testing.T) {
 	f1.Close()
 
 	outDir1 := filepath.Join(tmpDir, "out1")
-	outPath1, err := processImage(srcPath1, outDir1, 128, "", false, false, "", true, 0)
+	outPath1, _, err := processImage(srcPath1, outDir1, 128, "", false, false, "", true, 0, false)
 	if err != nil {
 		t.Fatalf("failed to process image 1: %v", err)
 	}
@@ -252,7 +252,7 @@ func TestProcessImageAutoRect(t *testing.T) {
 	f2.Close()
 
 	outDir2 := filepath.Join(tmpDir, "out2")
-	outPath2, err := processImage(srcPath2, outDir2, 128, "", false, false, "", true, 0)
+	outPath2, _, err := processImage(srcPath2, outDir2, 128, "", false, false, "", true, 0, false)
 	if err != nil {
 		t.Fatalf("failed to process image 2: %v", err)
 	}
@@ -266,7 +266,7 @@ func TestProcessImageAutoRect(t *testing.T) {
 	// Case 3: 100x200 (ratio 2.0) with custom ratio threshold = 2.5 (2.0 < 2.5).
 	// It should NOT trigger rect mode -> processed as square (128x128).
 	outDir3 := filepath.Join(tmpDir, "out3")
-	outPath3, err := processImage(srcPath2, outDir3, 128, "", false, false, "", true, 2.5)
+	outPath3, _, err := processImage(srcPath2, outDir3, 128, "", false, false, "", true, 2.5, false)
 	if err != nil {
 		t.Fatalf("failed to process image 3: %v", err)
 	}
@@ -280,7 +280,7 @@ func TestProcessImageAutoRect(t *testing.T) {
 	// Case 4: 100x200 (ratio 2.0) with custom ratio threshold = 1.5 (2.0 > 1.5).
 	// It SHOULD trigger rect mode -> processed as rect (128x256).
 	outDir4 := filepath.Join(tmpDir, "out4")
-	outPath4, err := processImage(srcPath2, outDir4, 128, "", false, false, "", true, 1.5)
+	outPath4, _, err := processImage(srcPath2, outDir4, 128, "", false, false, "", true, 1.5, false)
 	if err != nil {
 		t.Fatalf("failed to process image 4: %v", err)
 	}
@@ -338,7 +338,7 @@ func TestRecursiveZipMode(t *testing.T) {
 	var allEmojiEntries []MisskeyEmojiEntry
 
 	for _, filePath := range filesToProcess {
-		destPath, err := processImage(filePath, "", 128, "", false, false, "", false, 0)
+		destPath, _, err := processImage(filePath, "", 128, "", false, false, "", false, 0, false)
 		if err != nil {
 			t.Fatalf("processImage failed for %s: %v", filePath, err)
 		}
@@ -427,5 +427,60 @@ func TestRecursiveZipMode(t *testing.T) {
 	}
 	if _, err := os.Stat(sub2Zip); os.IsNotExist(err) {
 		t.Errorf("expected testcat_sub1_sub2.zip to exist, but it does not")
+	}
+}
+
+func TestProcessImageSkipExist(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "emoji-resizer-skip-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	w, h := 100, 100
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	srcPath := filepath.Join(tmpDir, "test.png")
+	f, err := os.Create(srcPath)
+	if err != nil {
+		t.Fatalf("failed to create source image file: %v", err)
+	}
+	if err := png.Encode(f, img); err != nil {
+		f.Close()
+		t.Fatalf("failed to encode source image: %v", err)
+	}
+	f.Close()
+
+	// 1. Process with skipExist = false (should create the output file)
+	outDir := filepath.Join(tmpDir, "out")
+	outPath, skipped, err := processImage(srcPath, outDir, 128, "", false, false, "", false, 0, false)
+	if err != nil {
+		t.Fatalf("first processImage failed: %v", err)
+	}
+	if skipped {
+		t.Errorf("expected skipped to be false on first run")
+	}
+
+	// Modify the created output file to check if it gets overwritten
+	testBytes := []byte("dummy modified content")
+	if err := os.WriteFile(outPath, testBytes, 0644); err != nil {
+		t.Fatalf("failed to write dummy content to output file: %v", err)
+	}
+
+	// 2. Process with skipExist = true (should skip and NOT overwrite)
+	_, skipped2, err := processImage(srcPath, outDir, 128, "", false, false, "", false, 0, true)
+	if err != nil {
+		t.Fatalf("second processImage failed: %v", err)
+	}
+	if !skipped2 {
+		t.Errorf("expected skipped to be true on second run")
+	}
+
+	// Verify content remains "dummy modified content" (not overwritten by resized image)
+	content, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("failed to read output file: %v", err)
+	}
+	if string(content) != "dummy modified content" {
+		t.Errorf("file was overwritten: expected 'dummy modified content', got %q", string(content))
 	}
 }

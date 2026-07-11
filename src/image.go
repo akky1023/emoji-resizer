@@ -79,11 +79,11 @@ func scanDirectory(dirPath string, recursive bool, outDir string, absOutDir stri
 	return files, nil
 }
 
-func processImage(srcPath string, outDir string, targetSize int, suffix string, noResize bool, rect bool, customBase string, autoRectActive bool, autoRectRatio float64) (string, error) {
+func processImage(srcPath string, outDir string, targetSize int, suffix string, noResize bool, rect bool, customBase string, autoRectActive bool, autoRectRatio float64, skipExist bool) (string, bool, error) {
 	// 1. Open the source file
 	file, err := os.Open(srcPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to open file: %w", err)
+		return "", false, fmt.Errorf("failed to open file: %w", err)
 	}
 	defer file.Close()
 
@@ -106,7 +106,7 @@ func processImage(srcPath string, outDir string, targetSize int, suffix string, 
 				img = g.Image[0]
 				format = "gif"
 			} else {
-				return "", fmt.Errorf("failed to seek/decode GIF: %w", errSeek)
+				return "", false, fmt.Errorf("failed to seek/decode GIF: %w", errSeek)
 			}
 		}
 	}
@@ -114,7 +114,7 @@ func processImage(srcPath string, outDir string, targetSize int, suffix string, 
 	if img == nil {
 		img, format, err = image.Decode(file)
 		if err != nil {
-			return "", fmt.Errorf("failed to decode image: %w", err)
+			return "", false, fmt.Errorf("failed to decode image: %w", err)
 		}
 	}
 
@@ -133,7 +133,7 @@ func processImage(srcPath string, outDir string, targetSize int, suffix string, 
 			minDim = float64(w)
 		}
 		ratio := maxDim / minDim
-		threshold := 2.5
+		threshold := 1.618
 		if autoRectRatio > 1.0 {
 			threshold = autoRectRatio
 		}
@@ -204,7 +204,7 @@ func processImage(srcPath string, outDir string, targetSize int, suffix string, 
 	}
 
 	if err := os.MkdirAll(finalOutDir, 0755); err != nil {
-		return "", fmt.Errorf("failed to create output directory: %w", err)
+		return "", false, fmt.Errorf("failed to create output directory: %w", err)
 	}
 
 	outFileName := base + suffix + ext
@@ -213,11 +213,11 @@ func processImage(srcPath string, outDir string, targetSize int, suffix string, 
 	// Prevent overwriting the original file in any case
 	absSrc, err := filepath.Abs(srcPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to resolve absolute path for source file: %w", err)
+		return "", false, fmt.Errorf("failed to resolve absolute path for source file: %w", err)
 	}
 	absDest, err := filepath.Abs(destPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to resolve absolute path for destination file: %w", err)
+		return "", false, fmt.Errorf("failed to resolve absolute path for destination file: %w", err)
 	}
 
 	if absSrc == absDest {
@@ -226,19 +226,25 @@ func processImage(srcPath string, outDir string, targetSize int, suffix string, 
 		destPath = filepath.Join(finalOutDir, outFileName)
 		absDest, err = filepath.Abs(destPath)
 		if err != nil {
-			return "", fmt.Errorf("failed to resolve absolute path for safe destination file: %w", err)
+			return "", false, fmt.Errorf("failed to resolve absolute path for safe destination file: %w", err)
 		}
 	}
 
 	if absSrc == absDest {
-		return "", fmt.Errorf("refusing to write: output file path is identical to source file path")
+		return "", false, fmt.Errorf("refusing to write: output file path is identical to source file path")
+	}
+
+	if skipExist {
+		if _, err := os.Stat(destPath); err == nil {
+			return destPath, true, nil
+		}
 	}
 
 	// Write to a temporary file first, then rename it (atomic swap) to prevent corruption
 	tmpPath := destPath + ".tmp"
 	tmpFile, err := os.Create(tmpPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to create temporary file: %w", err)
+		return "", false, fmt.Errorf("failed to create temporary file: %w", err)
 	}
 	defer func() {
 		tmpFile.Close()
@@ -274,16 +280,16 @@ func processImage(srcPath string, outDir string, targetSize int, suffix string, 
 	}
 
 	if err != nil {
-		return "", fmt.Errorf("failed to encode/save image: %w", err)
+		return "", false, fmt.Errorf("failed to encode/save image: %w", err)
 	}
 
 	if err := tmpFile.Close(); err != nil {
-		return "", fmt.Errorf("failed to close temporary file: %w", err)
+		return "", false, fmt.Errorf("failed to close temporary file: %w", err)
 	}
 
 	if err := os.Rename(tmpPath, destPath); err != nil {
-		return "", fmt.Errorf("failed to rename temporary file to destination: %w", err)
+		return "", false, fmt.Errorf("failed to rename temporary file to destination: %w", err)
 	}
 
-	return destPath, nil
+	return destPath, false, nil
 }
