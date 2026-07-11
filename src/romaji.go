@@ -63,12 +63,12 @@ func isYoonSuffix(r rune) bool {
 	return false
 }
 
-func isConsonant(b byte) bool {
+func isDoubleableConsonant(b byte) bool {
 	switch b {
-	case 'a', 'i', 'u', 'e', 'o':
-		return false
+	case 'k', 's', 't', 'p', 'b', 'c', 'd', 'f', 'g', 'j', 'm', 'r', 'v', 'z':
+		return true
 	}
-	return b >= 'a' && b <= 'z'
+	return false
 }
 
 func katakanaToHiragana(s string) string {
@@ -125,8 +125,8 @@ func hiraganaToRomaji(input string) (kunrei string, hepburn string) {
 
 				kNext, hNext := lookupRomaji(nextStr)
 
-				kConsonant := len(kNext) > 0 && isConsonant(kNext[0])
-				hConsonant := len(hNext) > 0 && isConsonant(hNext[0])
+				kConsonant := len(kNext) > 0 && isDoubleableConsonant(kNext[0])
+				hConsonant := len(hNext) > 0 && isDoubleableConsonant(hNext[0])
 
 				if kConsonant {
 					kResult.WriteByte(kNext[0])

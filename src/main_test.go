@@ -134,6 +134,8 @@ func TestRomajiConversion(t *testing.T) {
 		{"ぃ", "li", "li"},
 		{"ぁ", "la", "la"},
 		{"がっ", "galtu", "galtu"},
+		{"っっ", "ltultu", "ltultu"},
+		{"っぃ", "ltuli", "ltuli"},
 		{"ふぃっしゅ", "fissyu", "fisshu"},
 		{"ぇ", "le", "le"},
 		{"ヶ", "lke", "lke"},
