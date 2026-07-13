@@ -877,17 +877,17 @@ func TestOptionalConfigFlagAndFile(t *testing.T) {
 	}
 	png.Encode(f, img)
 	f.Close()
-
-	// Write a config file named 'config' (without extension) that changes the name prefix/suffix
-	configContent := `{"name_prefix": "pre_", "name_suffix": "_suf"}`
+	// Write an invalid config file named 'config' (without extension)
+	// If it is loaded, it will trigger an invalid size error.
+	configContent := `{"size": -5}`
 	configFile := filepath.Join(workingDir, "config")
 	if err := os.WriteFile(configFile, []byte(configContent), 0644); err != nil {
 		t.Fatalf("failed to write config file: %v", err)
 	}
 
 	// 1. Run without specifying -config but with -check
-	// Since 'config' exists, it should automatically load it and use prefix 'pre_' and suffix '_suf'
-	// So emoji name should be 'pre_test_suf'
+	// Since automatic loading when -config is omitted has been deleted, it should NOT load the config.
+	// Therefore, it should ignore the invalid size and succeed (outputting "OK").
 	absBinaryPath, err := filepath.Abs(binaryPath)
 	if err != nil {
 		t.Fatalf("failed to get absolute path of binary: %v", err)
@@ -897,22 +897,23 @@ func TestOptionalConfigFlagAndFile(t *testing.T) {
 	cmdRun.Dir = workingDir
 	outBytes, err := cmdRun.Output()
 	if err != nil {
-		t.Fatalf("execution failed: %v, stdout: %q", err, string(outBytes))
+		t.Fatalf("execution without -config failed: %v, stdout: %q", err, string(outBytes))
 	}
 	if strings.TrimSpace(string(outBytes)) != "OK" {
 		t.Errorf("expected OK, got %q", string(outBytes))
 	}
 
 	// 2. Run with -config flag but with no argument value
-	// We want to verify it doesn't fail with "flag needs an argument: -config"
+	// It should load the 'config' file, fail due to the invalid size, and exit with non-zero status.
 	cmdRun2 := exec.Command(absBinaryPath, "-config", "-check", imgFile)
 	cmdRun2.Dir = workingDir
-	outBytes2, err := cmdRun2.Output()
-	if err != nil {
-		t.Fatalf("execution with empty -config failed: %v, stdout: %q", err, string(outBytes2))
-	}
-	if strings.TrimSpace(string(outBytes2)) != "OK" {
-		t.Errorf("expected OK, got %q", string(outBytes2))
+	outBytes2, err := cmdRun2.CombinedOutput()
+	if err == nil {
+		t.Errorf("expected error exit status when -config is specified, but got exit status 0 (stdout: %q)", string(outBytes2))
+	} else {
+		if !strings.Contains(string(outBytes2), "invalid size -5") {
+			t.Errorf("expected output to mention 'invalid size -5', got %q", string(outBytes2))
+		}
 	}
 }
 

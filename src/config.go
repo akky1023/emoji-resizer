@@ -70,14 +70,6 @@ func parseAndApplyConfig(configPath string, seenFlags map[string]bool,
 	if configPath != "" {
 		shouldLoadConfig = true
 		finalConfigPath = configPath
-	} else {
-		if info, err := os.Stat("config"); err == nil && !info.IsDir() {
-			shouldLoadConfig = true
-			finalConfigPath = "config"
-		} else if info, err := os.Stat("config.json"); err == nil && !info.IsDir() {
-			shouldLoadConfig = true
-			finalConfigPath = "config.json"
-		}
 	}
 
 	if !shouldLoadConfig {
