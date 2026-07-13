@@ -846,4 +846,75 @@ func TestCheckModeIntegration(t *testing.T) {
 	}
 }
 
+func TestOptionalConfigFlagAndFile(t *testing.T) {
+	binaryPath := filepath.Join("..", "emoji-resizer.exe")
+	// Rebuild the binary to ensure it has our latest code
+	cmd := exec.Command("go", "build", "-o", binaryPath, ".")
+	cmd.Dir = "."
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("failed to build binary: %v", err)
+	}
+
+	// Create temp directory for testing files
+	tmpDir, err := os.MkdirTemp("", "emoji-resizer-config-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Create a subfolder inside tmpDir that acts as the working directory
+	workingDir := filepath.Join(tmpDir, "work")
+	if err := os.MkdirAll(workingDir, 0755); err != nil {
+		t.Fatalf("failed to create workingDir: %v", err)
+	}
+
+	// Create a dummy image inside workingDir
+	img := image.NewRGBA(image.Rect(0, 0, 10, 10))
+	imgFile := filepath.Join(workingDir, "test.png")
+	f, err := os.Create(imgFile)
+	if err != nil {
+		t.Fatalf("failed to create test image: %v", err)
+	}
+	png.Encode(f, img)
+	f.Close()
+
+	// Write a config file named 'config' (without extension) that changes the name prefix/suffix
+	configContent := `{"name_prefix": "pre_", "name_suffix": "_suf"}`
+	configFile := filepath.Join(workingDir, "config")
+	if err := os.WriteFile(configFile, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	// 1. Run without specifying -config but with -check
+	// Since 'config' exists, it should automatically load it and use prefix 'pre_' and suffix '_suf'
+	// So emoji name should be 'pre_test_suf'
+	absBinaryPath, err := filepath.Abs(binaryPath)
+	if err != nil {
+		t.Fatalf("failed to get absolute path of binary: %v", err)
+	}
+
+	cmdRun := exec.Command(absBinaryPath, "-check", imgFile)
+	cmdRun.Dir = workingDir
+	outBytes, err := cmdRun.Output()
+	if err != nil {
+		t.Fatalf("execution failed: %v, stdout: %q", err, string(outBytes))
+	}
+	if strings.TrimSpace(string(outBytes)) != "OK" {
+		t.Errorf("expected OK, got %q", string(outBytes))
+	}
+
+	// 2. Run with -config flag but with no argument value
+	// We want to verify it doesn't fail with "flag needs an argument: -config"
+	cmdRun2 := exec.Command(absBinaryPath, "-config", "-check", imgFile)
+	cmdRun2.Dir = workingDir
+	outBytes2, err := cmdRun2.Output()
+	if err != nil {
+		t.Fatalf("execution with empty -config failed: %v, stdout: %q", err, string(outBytes2))
+	}
+	if strings.TrimSpace(string(outBytes2)) != "OK" {
+		t.Errorf("expected OK, got %q", string(outBytes2))
+	}
+}
+
+
 

@@ -98,6 +98,32 @@ func main() {
 	flag.Var(&autoRect, "auto-rect", "automatically use rect mode if aspect ratio exceeds threshold (defaults to golden ratio ~1.618)")
 	flag.BoolVar(&skip, "skip", false, "skip resizing if the destination file already exists")
 	flag.BoolVar(&checkMode, "check", false, "check for duplicate emoji names after conversion")
+	// Pre-process os.Args to handle optional argument for -config
+	var newArgs []string
+	for i := 0; i < len(os.Args); i++ {
+		newArgs = append(newArgs, os.Args[i])
+		if os.Args[i] == "-config" || os.Args[i] == "--config" {
+			// Check if the next argument is missing or is another flag
+			nextIsVal := false
+			if i+1 < len(os.Args) {
+				if !strings.HasPrefix(os.Args[i+1], "-") {
+					nextIsVal = true
+				}
+			}
+			if !nextIsVal {
+				// No argument specified for -config. Determine default value.
+				defaultPath := "config.json"
+				if info, err := os.Stat("config"); err == nil && !info.IsDir() {
+					defaultPath = "config"
+				} else if info, err := os.Stat("config.json"); err == nil && !info.IsDir() {
+					defaultPath = "config.json"
+				}
+				newArgs = append(newArgs, defaultPath)
+			}
+		}
+	}
+	os.Args = newArgs
+
 	flag.Parse()
 
 	if showVersion {
@@ -520,7 +546,10 @@ func parseAndApplyConfig(configPath string, seenFlags map[string]bool,
 		shouldLoadConfig = true
 		finalConfigPath = configPath
 	} else {
-		if _, err := os.Stat("config.json"); err == nil {
+		if info, err := os.Stat("config"); err == nil && !info.IsDir() {
+			shouldLoadConfig = true
+			finalConfigPath = "config"
+		} else if info, err := os.Stat("config.json"); err == nil && !info.IsDir() {
 			shouldLoadConfig = true
 			finalConfigPath = "config.json"
 		}
