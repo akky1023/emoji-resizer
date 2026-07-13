@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"image"
 	"image/png"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -692,3 +694,156 @@ func TestParseAndApplyConfig(t *testing.T) {
 		t.Errorf("expected outDir '' (not overridden by config), got %q", outDir)
 	}
 }
+
+func TestComputeEmojiName(t *testing.T) {
+	// Test computeEmojiName without zipMode
+	customBase, name, hiragana, katakana, hepburn, hasPronunciation := computeEmojiName("path/to/ねこ.png", false, "pref_", "_suff", nil)
+	if customBase != "pref_ねこ_suff" {
+		t.Errorf("expected customBase pref_ねこ_suff, got %s", customBase)
+	}
+	_ = name
+	_ = hiragana
+	_ = katakana
+	_ = hepburn
+	_ = hasPronunciation
+
+	// Test computeEmojiName with zipMode (pure hiragana)
+	customBase, name, hiragana, katakana, hepburn, hasPronunciation = computeEmojiName("path/to/ねこ.png", true, "pref_", "_suff", nil)
+	if customBase != "pref_neko_suff" {
+		t.Errorf("expected customBase pref_neko_suff, got %s", customBase)
+	}
+	if name != "neko" || hiragana != "ねこ" || katakana != "ネコ" || hepburn != "neko" || !hasPronunciation {
+		t.Errorf("unexpected outputs: name=%q, hiragana=%q, katakana=%q, hepburn=%q, hasPronunciation=%t", name, hiragana, katakana, hepburn, hasPronunciation)
+	}
+
+	// Test computeEmojiName with zipMode (contains Japanese, requiring prompt)
+	inputReader := bufio.NewReader(strings.NewReader("いぬ\n"))
+	customBase2, name2, hiragana2, katakana2, hepburn2, hasPronunciation2 := computeEmojiName("path/to/犬.png", true, "pref_", "_suff", inputReader)
+	if customBase2 != "pref_inu_suff" {
+		t.Errorf("expected customBase pref_inu_suff, got %s", customBase2)
+	}
+	if name2 != "inu" || hiragana2 != "いぬ" || katakana2 != "イヌ" || hepburn2 != "inu" || !hasPronunciation2 {
+		t.Errorf("unexpected outputs: name=%q, hiragana=%q, katakana=%q, hepburn=%q, hasPronunciation=%t", name2, hiragana2, katakana2, hepburn2, hasPronunciation2)
+	}
+}
+
+func TestCheckModeIntegration(t *testing.T) {
+	binaryPath := filepath.Join("..", "emoji-resizer.exe")
+	// Rebuild the binary to ensure it has our latest code
+	cmd := exec.Command("go", "build", "-o", binaryPath, ".")
+	cmd.Dir = "."
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("failed to build binary: %v", err)
+	}
+
+	// Create temp directory for testing files
+	tmpDir, err := os.MkdirTemp("", "emoji-resizer-check-integration-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	dirA := filepath.Join(tmpDir, "dirA")
+	dirB := filepath.Join(tmpDir, "dirB")
+	if err := os.MkdirAll(dirA, 0755); err != nil {
+		t.Fatalf("failed to create dirA: %v", err)
+	}
+	if err := os.MkdirAll(dirB, 0755); err != nil {
+		t.Fatalf("failed to create dirB: %v", err)
+	}
+
+	// Write simple PNG files
+	img := image.NewRGBA(image.Rect(0, 0, 10, 10))
+	
+	writeDummyPNG := func(path string) {
+		f, err := os.Create(path)
+		if err != nil {
+			t.Fatalf("failed to create dummy file %s: %v", path, err)
+		}
+		defer f.Close()
+		if err := png.Encode(f, img); err != nil {
+			t.Fatalf("failed to encode dummy png %s: %v", path, err)
+		}
+	}
+
+	fileA1 := filepath.Join(dirA, "apple.png")
+	fileA2 := filepath.Join(dirA, "banana.png")
+	fileB1 := filepath.Join(dirB, "apple.png")
+	fileB2 := filepath.Join(dirB, "orange.png")
+
+	writeDummyPNG(fileA1)
+	writeDummyPNG(fileA2)
+	writeDummyPNG(fileB1)
+	writeDummyPNG(fileB2)
+
+	// Clean paths to match what we expect in the stdout
+	cleanFileA1 := filepath.Clean(fileA1)
+	cleanFileB1 := filepath.Clean(fileB1)
+
+	// Test Case 1: Run with duplicate names (apple.png in both dirA and dirB)
+	cmdCheckDup := exec.Command(binaryPath, "-check", fileA1, fileA2, fileB1, fileB2)
+	outBytes, err := cmdCheckDup.Output()
+	// Exit code should be 1 because duplicates exist
+	if err == nil {
+		t.Errorf("expected exit status 1 for duplicate check, got exit status 0 (stdout: %q)", string(outBytes))
+	} else {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			if exitErr.ExitCode() != 1 {
+				t.Errorf("expected exit code 1, got %d", exitErr.ExitCode())
+			}
+		} else {
+			t.Fatalf("unexpected execution error: %v", err)
+		}
+	}
+
+	outStr := strings.TrimSpace(string(outBytes))
+	// Normalize line endings to \n for comparison
+	outStr = strings.ReplaceAll(outStr, "\r\n", "\n")
+	expectedDupOutput := cleanFileA1 + "\n" + cleanFileB1
+	if outStr != expectedDupOutput {
+		t.Errorf("expected duplicate output:\n%q\nbut got:\n%q", expectedDupOutput, outStr)
+	}
+
+	// Test Case 2: Run without duplicate names (only unique files)
+	cmdCheckOK := exec.Command(binaryPath, "-check", fileA1, fileA2, fileB2)
+	outBytesOK, err := cmdCheckOK.Output()
+	if err != nil {
+		t.Errorf("expected exit status 0 for check without duplicates, got error: %v (stdout: %q)", err, string(outBytesOK))
+	}
+	outStrOK := strings.TrimSpace(string(outBytesOK))
+	if outStrOK != "OK" {
+		t.Errorf("expected stdout to be 'OK', got %q", outStrOK)
+	}
+
+	// Test Case 3: Run with mixed normal and ZIP names (emozi.png and えもじ.png)
+	fileA3 := filepath.Join(dirA, "emozi.png")
+	fileB3 := filepath.Join(dirB, "えもじ.png") // hiragana
+	writeDummyPNG(fileA3)
+	writeDummyPNG(fileB3)
+
+	cleanFileA3 := filepath.Clean(fileA3)
+	cleanFileB3 := filepath.Clean(fileB3)
+
+	cmdCheckMixed := exec.Command(binaryPath, "-check", fileA3, fileB3)
+	outBytesMixed, err := cmdCheckMixed.Output()
+	if err == nil {
+		t.Errorf("expected exit status 1 for mixed duplicate check, got exit status 0 (stdout: %q)", string(outBytesMixed))
+	} else {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			if exitErr.ExitCode() != 1 {
+				t.Errorf("expected exit code 1, got %d", exitErr.ExitCode())
+			}
+		} else {
+			t.Fatalf("unexpected execution error: %v", err)
+		}
+	}
+
+	outStrMixed := strings.TrimSpace(string(outBytesMixed))
+	outStrMixed = strings.ReplaceAll(outStrMixed, "\r\n", "\n")
+	expectedMixedOutput := cleanFileA3 + "\n" + cleanFileB3
+	if outStrMixed != expectedMixedOutput {
+		t.Errorf("expected mixed duplicate output:\n%q\nbut got:\n%q", expectedMixedOutput, outStrMixed)
+	}
+}
+
+

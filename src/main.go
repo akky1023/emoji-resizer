@@ -81,6 +81,7 @@ func main() {
 		zipMode     bool
 		autoRect    AutoRectValue
 		skip        bool
+		checkMode   bool
 	)
 
 	flag.IntVar(&size, "size", 128, "target resize square size in pixels")
@@ -96,6 +97,7 @@ func main() {
 	flag.BoolVar(&zipMode, "zip", false, "pack processed images into a Misskey-compatible emoji ZIP file")
 	flag.Var(&autoRect, "auto-rect", "automatically use rect mode if aspect ratio exceeds threshold (defaults to golden ratio ~1.618)")
 	flag.BoolVar(&skip, "skip", false, "skip resizing if the destination file already exists")
+	flag.BoolVar(&checkMode, "check", false, "check for duplicate emoji names after conversion")
 	flag.Parse()
 
 	if showVersion {
@@ -138,10 +140,10 @@ func main() {
 	}
 
 	// Ask for category and license if zipMode is active
+	reader := bufio.NewReader(os.Stdin)
 	var category string
 	var license string
-	if zipMode {
-		reader := bufio.NewReader(os.Stdin)
+	if zipMode && !checkMode {
 		if cfgCategory != "" {
 			category = cfgCategory
 		} else {
@@ -168,14 +170,22 @@ func main() {
 	for _, arg := range args {
 		info, err := os.Stat(arg)
 		if err != nil {
-			fmt.Printf("Error accessing path %s: %v\n", arg, err)
+			if checkMode {
+				fmt.Fprintf(os.Stderr, "Error accessing path %s: %v\n", arg, err)
+			} else {
+				fmt.Printf("Error accessing path %s: %v\n", arg, err)
+			}
 			continue
 		}
 
 		if info.IsDir() {
 			scanned, err := scanDirectory(arg, recursive, outDir, absOutDir)
 			if err != nil {
-				fmt.Printf("Error scanning directory %s: %v\n", arg, err)
+				if checkMode {
+					fmt.Fprintf(os.Stderr, "Error scanning directory %s: %v\n", arg, err)
+				} else {
+					fmt.Printf("Error scanning directory %s: %v\n", arg, err)
+				}
 				continue
 			}
 			filesToProcess = append(filesToProcess, scanned...)
@@ -183,14 +193,100 @@ func main() {
 			if isSupportedExtension(arg) {
 				filesToProcess = append(filesToProcess, arg)
 			} else {
-				fmt.Printf("Skipping unsupported file format: %s\n", arg)
+				if checkMode {
+					fmt.Fprintf(os.Stderr, "Skipping unsupported file format: %s\n", arg)
+				} else {
+					fmt.Printf("Skipping unsupported file format: %s\n", arg)
+				}
 			}
 		}
 	}
 
 	if len(filesToProcess) == 0 {
+		if checkMode {
+			fmt.Println("OK")
+			os.Exit(0)
+		}
 		fmt.Println("No supported image files found to process.")
 		return
+	}
+
+	if checkMode {
+		nameToPaths := make(map[string][]string)
+		var candidateNamesOrdered []string
+
+		for _, filePath := range filesToProcess {
+			displayPath := filepath.Clean(filePath)
+
+			// Collect candidate names for this file
+			seenCandidates := make(map[string]bool)
+			var uniqueCandidates []string
+
+			addCandidate := func(name string) {
+				if name != "" && !seenCandidates[name] {
+					seenCandidates[name] = true
+					uniqueCandidates = append(uniqueCandidates, name)
+				}
+			}
+
+			// 1. Normal name (prefixed and suffixed)
+			ext := filepath.Ext(filePath)
+			base := strings.TrimSuffix(filepath.Base(filePath), ext)
+			normalName := namePrefix + base + nameSuffix
+			addCandidate(normalName)
+
+			// 2. ZIP names (with conversion and aliases)
+			zipBase, _, hiragana, katakana, hepburn, hasPronunciation := computeEmojiName(filePath, true, namePrefix, nameSuffix, reader)
+			addCandidate(zipBase)
+
+			if hasPronunciation {
+				addCandidate(hiragana)
+				addCandidate(katakana)
+				addCandidate(hepburn)
+			}
+
+			// Map each unique candidate name to this file path
+			for _, candidate := range uniqueCandidates {
+				if len(nameToPaths[candidate]) == 0 {
+					candidateNamesOrdered = append(candidateNamesOrdered, candidate)
+				}
+				nameToPaths[candidate] = append(nameToPaths[candidate], displayPath)
+			}
+		}
+
+		printedGroups := make(map[string]bool)
+		var duplicateGroups [][]string
+
+		for _, name := range candidateNamesOrdered {
+			paths := nameToPaths[name]
+			if len(paths) > 1 {
+				// Deduplicate duplicate groups by their contents to prevent redundant outputs
+				sortedPaths := make([]string, len(paths))
+				copy(sortedPaths, paths)
+				sort.Strings(sortedPaths)
+
+				key := strings.Join(sortedPaths, "|")
+				if !printedGroups[key] {
+					printedGroups[key] = true
+					duplicateGroups = append(duplicateGroups, paths)
+				}
+			}
+		}
+
+		if len(duplicateGroups) == 0 {
+			fmt.Println("OK")
+			os.Exit(0)
+		} else {
+			for i, group := range duplicateGroups {
+				if i > 0 {
+					fmt.Println("===")
+				}
+				for _, path := range group {
+					fmt.Println(path)
+				}
+			}
+			os.Exit(1)
+		}
 	}
 
 	if noResize {
@@ -266,50 +362,7 @@ func main() {
 		displayPath := filepath.Clean(filePath)
 		fmt.Printf("Processing %s ... ", displayPath)
 
-		var customBase string
-		var name, hiragana, katakana, hepburn string
-		var hasPronunciation bool
-
-		if zipMode {
-			ext := filepath.Ext(filePath)
-			base := strings.TrimSuffix(filepath.Base(filePath), ext)
-
-			if isPureHiraganaOrSafe(base) {
-				hiragana = base
-				katakana = hiraganaToKatakana(hiragana)
-				var hepburnRaw string
-				name, hepburnRaw = hiraganaToRomaji(hiragana)
-				name = strings.ToLower(name)
-				hepburn = strings.ToLower(hepburnRaw)
-				hasPronunciation = true
-			} else if containsJapanese(base) {
-				reader := bufio.NewReader(os.Stdin)
-				fmt.Printf("ファイル名 '%s' のひらがな表記を入力してください (英語などの場合はそのままEnter): ", base)
-				input, err := reader.ReadString('\n')
-				if err == nil {
-					hiragana = strings.TrimSpace(input)
-				} else {
-					hiragana = ""
-				}
-				if hiragana != "" {
-					katakana = hiraganaToKatakana(hiragana)
-					var hepburnRaw string
-					name, hepburnRaw = hiraganaToRomaji(hiragana)
-					name = strings.ToLower(name)
-					hepburn = strings.ToLower(hepburnRaw)
-					hasPronunciation = true
-				} else {
-					name = strings.ToLower(base)
-				}
-			} else {
-				name = strings.ToLower(base)
-			}
-			customBase = namePrefix + name + nameSuffix
-		} else {
-			ext := filepath.Ext(filePath)
-			base := strings.TrimSuffix(filepath.Base(filePath), ext)
-			customBase = namePrefix + base + nameSuffix
-		}
+		customBase, name, hiragana, katakana, hepburn, hasPronunciation := computeEmojiName(filePath, zipMode, namePrefix, nameSuffix, reader)
 
 		destPath, skipped, err := processImage(filePath, outDir, size, suffix, noResize, rect, customBase, autoRect.Active, autoRect.Ratio, skip)
 		if err != nil {
@@ -544,3 +597,45 @@ func parseAndApplyConfig(configPath string, seenFlags map[string]bool,
 
 	return nil
 }
+
+func computeEmojiName(filePath string, zipMode bool, namePrefix string, nameSuffix string, reader *bufio.Reader) (customBase string, name string, hiragana string, katakana string, hepburn string, hasPronunciation bool) {
+	ext := filepath.Ext(filePath)
+	base := strings.TrimSuffix(filepath.Base(filePath), ext)
+
+	if zipMode {
+		if isPureHiraganaOrSafe(base) {
+			hiragana = base
+			katakana = hiraganaToKatakana(hiragana)
+			var hepburnRaw string
+			name, hepburnRaw = hiraganaToRomaji(hiragana)
+			name = strings.ToLower(name)
+			hepburn = strings.ToLower(hepburnRaw)
+			hasPronunciation = true
+		} else if containsJapanese(base) {
+			fmt.Printf("ファイル名 '%s' のひらがな表記を入力してください (英語などの場合はそのままEnter): ", base)
+			input, err := reader.ReadString('\n')
+			if err == nil {
+				hiragana = strings.TrimSpace(input)
+			} else {
+				hiragana = ""
+			}
+			if hiragana != "" {
+				katakana = hiraganaToKatakana(hiragana)
+				var hepburnRaw string
+				name, hepburnRaw = hiraganaToRomaji(hiragana)
+				name = strings.ToLower(name)
+				hepburn = strings.ToLower(hepburnRaw)
+				hasPronunciation = true
+			} else {
+				name = strings.ToLower(base)
+			}
+		} else {
+			name = strings.ToLower(base)
+		}
+		customBase = namePrefix + name + nameSuffix
+	} else {
+		customBase = namePrefix + base + nameSuffix
+	}
+	return customBase, name, hiragana, katakana, hepburn, hasPronunciation
+}
+
