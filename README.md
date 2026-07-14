@@ -49,6 +49,7 @@ go build -o emoji-resizer.exe ./src
 | `-name-suffix` | `なし` | 絵文字名の後ろに付与する接尾辞 | `-zip`時のみ意味があります |
 | `-r` | `false` | 指定したディレクトリ以下のディレクトリもすべて調べる | |
 | `-no-resize` | `false` | 正方形にして終了．圧縮しない |  `-rect`指定時はなにもしない |
+| `-no-resize-if-small` | `false` | size以下なら圧縮しない． | |
 | `-zip` | `false` | Misskey一括インポート用ZIPアーカイブ (`emojis.zip`) を生成する | ファイル名をひらがなにしておくとエイリアスがある程度自動補完されます |
 | `-skip` | `false` | すでにリサイズ先に出力ファイルと同じ名前のファイルが存在する場合，その画像の処理をスキップする |
 | `-config` | `なし` | 設定ファイル（JSON）のパスを指定 | パスの指定を省略したらカレントディレクトリに`config.json`または`config`があるかをチェック |
@@ -69,6 +70,7 @@ go build -o emoji-resizer.exe ./src
   "name_suffix": "_suf",
   "r": true,
   "no_resize": false,
+  "no_resise_if_small": false,
   "rect": false,
   "zip": true,
   "auto_rect": 1.618,

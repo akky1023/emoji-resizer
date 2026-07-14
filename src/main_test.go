@@ -38,7 +38,7 @@ func TestProcessImageRect(t *testing.T) {
 	// Target size: 128x128
 	// Output should be a 128x128 square image.
 	outDir1 := filepath.Join(tmpDir, "out1")
-	_, _, err = processImage(srcPath, outDir1, 128, "", false, false, "", false, 0, false)
+	_, _, err = processImage(srcPath, outDir1, 128, "", false, false, "", false, 0, false, false)
 	if err != nil {
 		t.Errorf("processImage (rect=false) failed: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestProcessImageRect(t *testing.T) {
 	// Target size: 128 (short side matches 128)
 	// Since w < h (100 < 200), width (short side) should become 128, and height should scale to 256.
 	outDir2 := filepath.Join(tmpDir, "out2")
-	_, _, err = processImage(srcPath, outDir2, 128, "", false, true, "", false, 0, false)
+	_, _, err = processImage(srcPath, outDir2, 128, "", false, true, "", false, 0, false, false)
 	if err != nil {
 		t.Errorf("processImage (rect=true, vertical) failed: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestProcessImageRect(t *testing.T) {
 	// Target size: 128 (short side matches 128)
 	// Since h3 < w3 (150 < 300), height (short side) should become 128, and width should scale to 256.
 	outDir3 := filepath.Join(tmpDir, "out3")
-	_, _, err = processImage(srcPath3, outDir3, 128, "", false, true, "", false, 0, false)
+	_, _, err = processImage(srcPath3, outDir3, 128, "", false, true, "", false, 0, false, false)
 	if err != nil {
 		t.Errorf("processImage (rect=true, horizontal) failed: %v", err)
 	}
@@ -236,7 +236,7 @@ func TestProcessImageAutoRect(t *testing.T) {
 	f1.Close()
 
 	outDir1 := filepath.Join(tmpDir, "out1")
-	outPath1, _, err := processImage(srcPath1, outDir1, 128, "", false, false, "", true, 0, false)
+	outPath1, _, err := processImage(srcPath1, outDir1, 128, "", false, false, "", true, 0, false, false)
 	if err != nil {
 		t.Fatalf("failed to process image 1: %v", err)
 	}
@@ -256,7 +256,7 @@ func TestProcessImageAutoRect(t *testing.T) {
 	f2.Close()
 
 	outDir2 := filepath.Join(tmpDir, "out2")
-	outPath2, _, err := processImage(srcPath2, outDir2, 128, "", false, false, "", true, 0, false)
+	outPath2, _, err := processImage(srcPath2, outDir2, 128, "", false, false, "", true, 0, false, false)
 	if err != nil {
 		t.Fatalf("failed to process image 2: %v", err)
 	}
@@ -270,7 +270,7 @@ func TestProcessImageAutoRect(t *testing.T) {
 	// Case 3: 100x200 (ratio 2.0) with custom ratio threshold = 2.5 (2.0 < 2.5).
 	// It should NOT trigger rect mode -> processed as square (128x128).
 	outDir3 := filepath.Join(tmpDir, "out3")
-	outPath3, _, err := processImage(srcPath2, outDir3, 128, "", false, false, "", true, 2.5, false)
+	outPath3, _, err := processImage(srcPath2, outDir3, 128, "", false, false, "", true, 2.5, false, false)
 	if err != nil {
 		t.Fatalf("failed to process image 3: %v", err)
 	}
@@ -284,7 +284,7 @@ func TestProcessImageAutoRect(t *testing.T) {
 	// Case 4: 100x200 (ratio 2.0) with custom ratio threshold = 1.5 (2.0 > 1.5).
 	// It SHOULD trigger rect mode -> processed as rect (128x256).
 	outDir4 := filepath.Join(tmpDir, "out4")
-	outPath4, _, err := processImage(srcPath2, outDir4, 128, "", false, false, "", true, 1.5, false)
+	outPath4, _, err := processImage(srcPath2, outDir4, 128, "", false, false, "", true, 1.5, false, false)
 	if err != nil {
 		t.Fatalf("failed to process image 4: %v", err)
 	}
@@ -342,7 +342,7 @@ func TestRecursiveZipMode(t *testing.T) {
 	var allEmojiEntries []MisskeyEmojiEntry
 
 	for _, filePath := range filesToProcess {
-		destPath, _, err := processImage(filePath, "", 128, "", false, false, "", false, 0, false)
+		destPath, _, err := processImage(filePath, "", 128, "", false, false, "", false, 0, false, false)
 		if err != nil {
 			t.Fatalf("processImage failed for %s: %v", filePath, err)
 		}
@@ -456,7 +456,7 @@ func TestProcessImageSkipExist(t *testing.T) {
 
 	// 1. Process with skipExist = false (should create the output file)
 	outDir := filepath.Join(tmpDir, "out")
-	outPath, skipped, err := processImage(srcPath, outDir, 128, "", false, false, "", false, 0, false)
+	outPath, skipped, err := processImage(srcPath, outDir, 128, "", false, false, "", false, 0, false, false)
 	if err != nil {
 		t.Fatalf("first processImage failed: %v", err)
 	}
@@ -471,7 +471,7 @@ func TestProcessImageSkipExist(t *testing.T) {
 	}
 
 	// 2. Process with skipExist = true (should skip and NOT overwrite)
-	_, skipped2, err := processImage(srcPath, outDir, 128, "", false, false, "", false, 0, true)
+	_, skipped2, err := processImage(srcPath, outDir, 128, "", false, false, "", false, 0, true, false)
 	if err != nil {
 		t.Fatalf("second processImage failed: %v", err)
 	}
@@ -536,7 +536,7 @@ func TestNamePrefixSuffixZipMode(t *testing.T) {
 	customBase := namePrefix + name + nameSuffix
 
 	// Run processImage
-	destPath, _, err := processImage(imgPath, tmpDir, 128, "", false, false, customBase, false, 0, false)
+	destPath, _, err := processImage(imgPath, tmpDir, 128, "", false, false, customBase, false, 0, false, false)
 	if err != nil {
 		t.Fatalf("processImage failed: %v", err)
 	}
@@ -597,6 +597,7 @@ func TestParseAndApplyConfig(t *testing.T) {
 		"name_suffix": "_conf_suf",
 		"r": true,
 		"no_resize": true,
+		"no_resize_if_small": true,
 		"rect": true,
 		"zip": true,
 		"skip": true,
@@ -618,6 +619,7 @@ func TestParseAndApplyConfig(t *testing.T) {
 	nameSuffix := ""
 	recursive := false
 	noResize := false
+	noResizeIfSmall := false
 	rect := false
 	zipMode := false
 	skip := false
@@ -627,7 +629,7 @@ func TestParseAndApplyConfig(t *testing.T) {
 
 	seenFlags := make(map[string]bool)
 
-	err = parseAndApplyConfig(cfgPath, seenFlags, &size, &outDir, &suffix, &namePrefix, &nameSuffix, &recursive, &noResize, &rect, &zipMode, &skip, &autoRect, &cfgCategory, &cfgLicense)
+	err = parseAndApplyConfig(cfgPath, seenFlags, &size, &outDir, &suffix, &namePrefix, &nameSuffix, &recursive, &noResize, &rect, &zipMode, &skip, &autoRect, &cfgCategory, &cfgLicense, &noResizeIfSmall)
 	if err != nil {
 		t.Fatalf("parseAndApplyConfig failed: %v", err)
 	}
@@ -652,6 +654,9 @@ func TestParseAndApplyConfig(t *testing.T) {
 	}
 	if !noResize {
 		t.Errorf("expected noResize to be true")
+	}
+	if !noResizeIfSmall {
+		t.Errorf("expected noResizeIfSmall to be true")
 	}
 	if !rect {
 		t.Errorf("expected rect to be true")
@@ -681,7 +686,7 @@ func TestParseAndApplyConfig(t *testing.T) {
 		"out":  true,
 	}
 
-	err = parseAndApplyConfig(cfgPath, seenFlags, &size, &outDir, &suffix, &namePrefix, &nameSuffix, &recursive, &noResize, &rect, &zipMode, &skip, &autoRect, &cfgCategory, &cfgLicense)
+	err = parseAndApplyConfig(cfgPath, seenFlags, &size, &outDir, &suffix, &namePrefix, &nameSuffix, &recursive, &noResize, &rect, &zipMode, &skip, &autoRect, &cfgCategory, &cfgLicense, &noResizeIfSmall)
 	if err != nil {
 		t.Fatalf("parseAndApplyConfig override run failed: %v", err)
 	}
@@ -914,6 +919,120 @@ func TestOptionalConfigFlagAndFile(t *testing.T) {
 		if !strings.Contains(string(outBytes2), "invalid size -5") {
 			t.Errorf("expected output to mention 'invalid size -5', got %q", string(outBytes2))
 		}
+	}
+}
+
+func TestProcessImageNoResizeIfSmall(t *testing.T) {
+	// Create a temporary directory
+	tmpDir, err := os.MkdirTemp("", "emoji-resizer-no-resize-if-small-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Create a 100x100 test image (smaller than 128)
+	img1 := image.NewRGBA(image.Rect(0, 0, 100, 100))
+	srcPath1 := filepath.Join(tmpDir, "img1.png")
+	f1, _ := os.Create(srcPath1)
+	png.Encode(f1, img1)
+	f1.Close()
+
+	// 1. Without rect, targetSize = 128
+	// max(w, h) = 100 <= 128. With noResizeIfSmall=true, it should NOT resize, but still pad to square -> 100x100.
+	outDir1 := filepath.Join(tmpDir, "out1")
+	outPath1, _, err := processImage(srcPath1, outDir1, 128, "", false, false, "", false, 0, false, true)
+	if err != nil {
+		t.Fatalf("failed to process image 1: %v", err)
+	}
+	rf1, _ := os.Open(outPath1)
+	ri1, _ := png.Decode(rf1)
+	rf1.Close()
+	if ri1.Bounds().Dx() != 100 || ri1.Bounds().Dy() != 100 {
+		t.Errorf("expected 100x100 (no-resize-if-small), got %dx%d", ri1.Bounds().Dx(), ri1.Bounds().Dy())
+	}
+
+	// 2. Without rect, targetSize = 128, but noResizeIfSmall=false (default).
+	// It should resize/pad to 128x128.
+	outDir2 := filepath.Join(tmpDir, "out2")
+	outPath2, _, err := processImage(srcPath1, outDir2, 128, "", false, false, "", false, 0, false, false)
+	if err != nil {
+		t.Fatalf("failed to process image 2: %v", err)
+	}
+	rf2, _ := os.Open(outPath2)
+	ri2, _ := png.Decode(rf2)
+	rf2.Close()
+	if ri2.Bounds().Dx() != 128 || ri2.Bounds().Dy() != 128 {
+		t.Errorf("expected 128x128 (standard), got %dx%d", ri2.Bounds().Dx(), ri2.Bounds().Dy())
+	}
+
+	// Create a 100x200 vertical rectangular image
+	img3 := image.NewRGBA(image.Rect(0, 0, 100, 200))
+	srcPath3 := filepath.Join(tmpDir, "img3.png")
+	f3, _ := os.Create(srcPath3)
+	png.Encode(f3, img3)
+	f3.Close()
+
+	// 3. With rect=true, targetSize = 128.
+	// short side = 100 < 128. With noResizeIfSmall=true, it should NOT resize -> kept as 100x200.
+	outDir3 := filepath.Join(tmpDir, "out3")
+	outPath3, _, err := processImage(srcPath3, outDir3, 128, "", false, true, "", false, 0, false, true)
+	if err != nil {
+		t.Fatalf("failed to process image 3: %v", err)
+	}
+	rf3, _ := os.Open(outPath3)
+	ri3, _ := png.Decode(rf3)
+	rf3.Close()
+	if ri3.Bounds().Dx() != 100 || ri3.Bounds().Dy() != 200 {
+		t.Errorf("expected 100x200 (rect, no-resize-if-small), got %dx%d", ri3.Bounds().Dx(), ri3.Bounds().Dy())
+	}
+
+	// 4. With rect=true, targetSize = 128, noResizeIfSmall=false (default).
+	// short side = 100 < 128. It should resize to short side=128 -> 128x256.
+	outDir4 := filepath.Join(tmpDir, "out4")
+	outPath4, _, err := processImage(srcPath3, outDir4, 128, "", false, true, "", false, 0, false, false)
+	if err != nil {
+		t.Fatalf("failed to process image 4: %v", err)
+	}
+	rf4, _ := os.Open(outPath4)
+	ri4, _ := png.Decode(rf4)
+	rf4.Close()
+	if ri4.Bounds().Dx() != 128 || ri4.Bounds().Dy() != 256 {
+		t.Errorf("expected 128x256 (rect, standard), got %dx%d", ri4.Bounds().Dx(), ri4.Bounds().Dy())
+	}
+
+	// 5. Without rect, targetSize = 128, image is 100x200.
+	// max(w, h) = 200 > 128. So it SHOULD resize to 128x128.
+	outDir5 := filepath.Join(tmpDir, "out5")
+	outPath5, _, err := processImage(srcPath3, outDir5, 128, "", false, false, "", false, 0, false, true)
+	if err != nil {
+		t.Fatalf("failed to process image 5: %v", err)
+	}
+	rf5, _ := os.Open(outPath5)
+	ri5, _ := png.Decode(rf5)
+	rf5.Close()
+	if ri5.Bounds().Dx() != 128 || ri5.Bounds().Dy() != 128 {
+		t.Errorf("expected 128x128 (padded & resized since 200 > 128), got %dx%d", ri5.Bounds().Dx(), ri5.Bounds().Dy())
+	}
+
+	// Create a 150x300 vertical rectangular image
+	img6 := image.NewRGBA(image.Rect(0, 0, 150, 300))
+	srcPath6 := filepath.Join(tmpDir, "img6.png")
+	f6, _ := os.Create(srcPath6)
+	png.Encode(f6, img6)
+	f6.Close()
+
+	// 6. With rect=true, targetSize = 128.
+	// short side = 150 >= 128. With noResizeIfSmall=true, it should STILL resize -> 128x256.
+	outDir6 := filepath.Join(tmpDir, "out6")
+	outPath6, _, err := processImage(srcPath6, outDir6, 128, "", false, true, "", false, 0, false, true)
+	if err != nil {
+		t.Fatalf("failed to process image 6: %v", err)
+	}
+	rf6, _ := os.Open(outPath6)
+	ri6, _ := png.Decode(rf6)
+	rf6.Close()
+	if ri6.Bounds().Dx() != 128 || ri6.Bounds().Dy() != 256 {
+		t.Errorf("expected 128x256 (rect, resized since 150 >= 128), got %dx%d", ri6.Bounds().Dx(), ri6.Bounds().Dy())
 	}
 }
 

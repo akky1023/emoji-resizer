@@ -80,7 +80,7 @@ func scanDirectory(dirPath string, recursive bool, outDir string, absOutDir stri
 	return files, nil
 }
 
-func processImage(srcPath string, outDir string, targetSize int, suffix string, noResize bool, rect bool, customBase string, autoRectActive bool, autoRectRatio float64, skipExist bool) (string, bool, error) {
+func processImage(srcPath string, outDir string, targetSize int, suffix string, noResize bool, rect bool, customBase string, autoRectActive bool, autoRectRatio float64, skipExist bool, noResizeIfSmall bool) (string, bool, error) {
 	// 1. Open the source file
 	file, err := os.Open(srcPath)
 	if err != nil {
@@ -139,6 +139,26 @@ func processImage(srcPath string, outDir string, targetSize int, suffix string, 
 			threshold = autoRectRatio
 		}
 		actualRect = ratio > threshold
+	}
+
+	if noResizeIfSmall && w > 0 && h > 0 {
+		if actualRect {
+			minDim := w
+			if h < w {
+				minDim = h
+			}
+			if minDim < targetSize {
+				noResize = true
+			}
+		} else {
+			maxDim := w
+			if h > w {
+				maxDim = h
+			}
+			if maxDim <= targetSize {
+				noResize = true
+			}
+		}
 	}
 
 	var finalImg image.Image

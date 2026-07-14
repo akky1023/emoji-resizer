@@ -16,20 +16,21 @@ var version = "devel"
 
 func main() {
 	var (
-		size        int
-		outDir      string
-		suffix      string
-		namePrefix  string
-		nameSuffix  string
-		configPath  string
-		recursive   bool
-		noResize    bool
-		rect        bool
-		showVersion bool
-		zipMode     bool
-		autoRect    AutoRectValue
-		skip        bool
-		checkMode   bool
+		size            int
+		outDir          string
+		suffix          string
+		namePrefix      string
+		nameSuffix      string
+		configPath      string
+		recursive       bool
+		noResize        bool
+		noResizeIfSmall bool
+		rect            bool
+		showVersion     bool
+		zipMode         bool
+		autoRect        AutoRectValue
+		skip            bool
+		checkMode       bool
 	)
 
 	flag.IntVar(&size, "size", 128, "target resize square size in pixels")
@@ -40,6 +41,7 @@ func main() {
 	flag.StringVar(&configPath, "config", "", "path to config file (default: './config.json' if exists)")
 	flag.BoolVar(&recursive, "r", false, "recursively scan directories")
 	flag.BoolVar(&noResize, "no-resize", false, "skip final resizing and keep the original square dimensions")
+	flag.BoolVar(&noResizeIfSmall, "no-resize-if-small", false, "skip resizing if the image is already smaller than the target size")
 	flag.BoolVar(&rect, "rect", false, "resize rectangle keeping aspect ratio, short side matches target size (no padding)")
 	flag.BoolVar(&showVersion, "version", false, "show version information and exit")
 	flag.BoolVar(&zipMode, "zip", false, "pack processed images into a Misskey-compatible emoji ZIP file")
@@ -87,7 +89,7 @@ func main() {
 	var cfgCategory string
 	var cfgLicense string
 
-	if err := parseAndApplyConfig(configPath, seenFlags, &size, &outDir, &suffix, &namePrefix, &nameSuffix, &recursive, &noResize, &rect, &zipMode, &skip, &autoRect, &cfgCategory, &cfgLicense); err != nil {
+	if err := parseAndApplyConfig(configPath, seenFlags, &size, &outDir, &suffix, &namePrefix, &nameSuffix, &recursive, &noResize, &rect, &zipMode, &skip, &autoRect, &cfgCategory, &cfgLicense, &noResizeIfSmall); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
@@ -279,7 +281,11 @@ func main() {
 		fmt.Printf("Found %d image files. Starting processing (%s)...\n", len(filesToProcess), modeStr)
 	} else {
 		if rect {
-			fmt.Printf("Found %d image files. Starting processing (rect mode, target short side: %d px)...\n", len(filesToProcess), size)
+			var extra string
+			if noResizeIfSmall {
+				extra = ", no-resize-if-small"
+			}
+			fmt.Printf("Found %d image files. Starting processing (rect mode, target short side: %d px%s)...\n", len(filesToProcess), size, extra)
 		} else if autoRect.Active {
 			var thStr string
 			if autoRect.Ratio > 1.0 {
@@ -287,9 +293,17 @@ func main() {
 			} else {
 				thStr = "golden ratio"
 			}
-			fmt.Printf("Found %d image files. Starting processing (auto-rect mode threshold %s, target size: %d px)...\n", len(filesToProcess), thStr, size)
+			var extra string
+			if noResizeIfSmall {
+				extra = ", no-resize-if-small"
+			}
+			fmt.Printf("Found %d image files. Starting processing (auto-rect mode threshold %s, target size: %d px%s)...\n", len(filesToProcess), thStr, size, extra)
 		} else {
-			fmt.Printf("Found %d image files. Starting processing (target size: %dx%d px)...\n", len(filesToProcess), size, size)
+			var extra string
+			if noResizeIfSmall {
+				extra = ", no-resize-if-small"
+			}
+			fmt.Printf("Found %d image files. Starting processing (target size: %dx%d px%s)...\n", len(filesToProcess), size, size, extra)
 		}
 	}
 
@@ -338,7 +352,7 @@ func main() {
 
 		customBase, name, hiragana, katakana, hepburn, hasPronunciation := computeEmojiName(filePath, zipMode, namePrefix, nameSuffix, reader)
 
-		destPath, skipped, err := processImage(filePath, outDir, size, suffix, noResize, rect, customBase, autoRect.Active, autoRect.Ratio, skip)
+		destPath, skipped, err := processImage(filePath, outDir, size, suffix, noResize, rect, customBase, autoRect.Active, autoRect.Ratio, skip, noResizeIfSmall)
 		if err != nil {
 			fmt.Printf("Failed: %v\n", err)
 			failureCount++

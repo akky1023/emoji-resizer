@@ -44,25 +44,26 @@ func (a *AutoRectValue) IsBoolFlag() bool {
 }
 
 type Config struct {
-	Size        *int        `json:"size"`
-	OutDir      *string     `json:"out"`
-	Suffix      *string     `json:"suffix"`
-	NamePrefix  *string     `json:"name_prefix"`
-	NameSuffix  *string     `json:"name_suffix"`
-	Recursive   *bool       `json:"r"`
-	NoResize    *bool       `json:"no_resize"`
-	Rect        *bool       `json:"rect"`
-	ZipMode     *bool       `json:"zip"`
-	AutoRect    interface{} `json:"auto_rect"`
-	Skip        *bool       `json:"skip"`
-	Category    *string     `json:"category"`
-	License     *string     `json:"license"`
+	Size            *int        `json:"size"`
+	OutDir          *string     `json:"out"`
+	Suffix          *string     `json:"suffix"`
+	NamePrefix      *string     `json:"name_prefix"`
+	NameSuffix      *string     `json:"name_suffix"`
+	Recursive       *bool       `json:"r"`
+	NoResize        *bool       `json:"no_resize"`
+	NoResizeIfSmall *bool       `json:"no_resize_if_small"`
+	Rect            *bool       `json:"rect"`
+	ZipMode         *bool       `json:"zip"`
+	AutoRect        interface{} `json:"auto_rect"`
+	Skip            *bool       `json:"skip"`
+	Category        *string     `json:"category"`
+	License         *string     `json:"license"`
 }
 
 func parseAndApplyConfig(configPath string, seenFlags map[string]bool,
 	size *int, outDir *string, suffix *string, namePrefix *string, nameSuffix *string,
 	recursive *bool, noResize *bool, rect *bool, zipMode *bool, skip *bool,
-	autoRect *AutoRectValue, cfgCategory *string, cfgLicense *string) error {
+	autoRect *AutoRectValue, cfgCategory *string, cfgLicense *string, noResizeIfSmall *bool) error {
 
 	var shouldLoadConfig bool
 	var finalConfigPath string
@@ -108,6 +109,9 @@ func parseAndApplyConfig(configPath string, seenFlags map[string]bool,
 	}
 	if cfg.NoResize != nil && !seenFlags["no-resize"] {
 		*noResize = *cfg.NoResize
+	}
+	if cfg.NoResizeIfSmall != nil && !seenFlags["no-resize-if-small"] {
+		*noResizeIfSmall = *cfg.NoResizeIfSmall
 	}
 	if cfg.Rect != nil && !seenFlags["rect"] {
 		*rect = *cfg.Rect
