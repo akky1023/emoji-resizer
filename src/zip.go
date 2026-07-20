@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"sort"
 	"time"
 )
 
@@ -115,3 +117,68 @@ func addFileToZip(archive *zip.Writer, item zipItem) error {
 
 	return nil
 }
+
+// createZipArchives generates local and all-in-one ZIP archives.
+func createZipArchives(
+	dirZips map[string]*dirZipData,
+	allZipItems []zipItem,
+	allEmojiEntries []MisskeyEmojiEntry,
+	recursive bool,
+	topLevelOutDir string,
+	category string,
+) error {
+	categoryPrefix := "emoji"
+	if category != "" {
+		categoryPrefix = sanitizeFileName(category)
+		if categoryPrefix == "" {
+			categoryPrefix = "emoji"
+		}
+	}
+
+	var targetDirs []string
+	for k := range dirZips {
+		targetDirs = append(targetDirs, k)
+	}
+	sort.Strings(targetDirs)
+
+	for _, targetDir := range targetDirs {
+		data := dirZips[targetDir]
+		var zipPath string
+		if recursive {
+			if err := os.MkdirAll(topLevelOutDir, 0755); err != nil {
+				return fmt.Errorf("failed to create top-level output directory: %w", err)
+			}
+			zipPath = filepath.Join(topLevelOutDir, categoryPrefix+"_"+data.suffixName+".zip")
+		} else {
+			if err := os.MkdirAll(targetDir, 0755); err != nil {
+				return fmt.Errorf("failed to create directory %s: %w", targetDir, err)
+			}
+			zipPath = filepath.Join(targetDir, categoryPrefix+".zip")
+		}
+
+		displayZipPath := filepath.Clean(zipPath)
+		fmt.Printf("Creating ZIP archive at %s ... ", displayZipPath)
+		if err := createEmojiZip(zipPath, data.items, data.entries); err != nil {
+			fmt.Println("Failed")
+			return err
+		}
+		fmt.Println("Success")
+	}
+
+	if recursive {
+		if err := os.MkdirAll(topLevelOutDir, 0755); err != nil {
+			return fmt.Errorf("failed to create top-level output directory: %w", err)
+		}
+		zipPath := filepath.Join(topLevelOutDir, categoryPrefix+"_all.zip")
+		displayZipPath := filepath.Clean(zipPath)
+		fmt.Printf("Creating ZIP archive at %s ... ", displayZipPath)
+		if err := createEmojiZip(zipPath, allZipItems, allEmojiEntries); err != nil {
+			fmt.Println("Failed")
+			return err
+		}
+		fmt.Println("Success")
+	}
+
+	return nil
+}
+
