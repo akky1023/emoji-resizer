@@ -702,9 +702,12 @@ func TestParseAndApplyConfig(t *testing.T) {
 
 func TestComputeEmojiName(t *testing.T) {
 	// Test computeEmojiName without zipMode
-	customBase, name, hiragana, katakana, hepburn, hasPronunciation := computeEmojiName("path/to/ねこ.png", false, "pref_", "_suff", nil)
+	customBase, name, hiragana, katakana, hepburn, hasPronunciation, rawAliases := computeEmojiName("path/to/ねこ.png", false, "pref_", "_suff", nil)
 	if customBase != "pref_ねこ_suff" {
 		t.Errorf("expected customBase pref_ねこ_suff, got %s", customBase)
+	}
+	if len(rawAliases) != 0 {
+		t.Errorf("expected 0 rawAliases, got %v", rawAliases)
 	}
 	_ = name
 	_ = hiragana
@@ -713,22 +716,72 @@ func TestComputeEmojiName(t *testing.T) {
 	_ = hasPronunciation
 
 	// Test computeEmojiName with zipMode (pure hiragana)
-	customBase, name, hiragana, katakana, hepburn, hasPronunciation = computeEmojiName("path/to/ねこ.png", true, "pref_", "_suff", nil)
+	customBase, name, hiragana, katakana, hepburn, hasPronunciation, rawAliases = computeEmojiName("path/to/ねこ.png", true, "pref_", "_suff", nil)
 	if customBase != "pref_neko_suff" {
 		t.Errorf("expected customBase pref_neko_suff, got %s", customBase)
 	}
 	if name != "neko" || hiragana != "ねこ" || katakana != "ネコ" || hepburn != "neko" || !hasPronunciation {
 		t.Errorf("unexpected outputs: name=%q, hiragana=%q, katakana=%q, hepburn=%q, hasPronunciation=%t", name, hiragana, katakana, hepburn, hasPronunciation)
 	}
+	if len(rawAliases) != 0 {
+		t.Errorf("expected 0 rawAliases, got %v", rawAliases)
+	}
+
+	// Test computeEmojiName with zipMode and '@' manual aliases
+	customBaseAlias, nameAlias, hiraganaAlias, katakanaAlias, hepburnAlias, hasPronunciationAlias, rawAliasesAlias := computeEmojiName("path/to/ねこ@cat@kitty.png", true, "pref_", "_suff", nil)
+	if customBaseAlias != "pref_neko_suff" {
+		t.Errorf("expected customBase pref_neko_suff, got %s", customBaseAlias)
+	}
+	if nameAlias != "neko" || hiraganaAlias != "ねこ" || katakanaAlias != "ネコ" || hepburnAlias != "neko" || !hasPronunciationAlias {
+		t.Errorf("unexpected outputs: name=%q, hiragana=%q, katakana=%q, hepburn=%q, hasPronunciation=%t", nameAlias, hiraganaAlias, katakanaAlias, hepburnAlias, hasPronunciationAlias)
+	}
+	if len(rawAliasesAlias) != 2 || rawAliasesAlias[0] != "cat" || rawAliasesAlias[1] != "kitty" {
+		t.Errorf("expected rawAliases ['cat', 'kitty'], got %v", rawAliasesAlias)
+	}
 
 	// Test computeEmojiName with zipMode (contains Japanese, requiring prompt)
 	inputReader := bufio.NewReader(strings.NewReader("いぬ\n"))
-	customBase2, name2, hiragana2, katakana2, hepburn2, hasPronunciation2 := computeEmojiName("path/to/犬.png", true, "pref_", "_suff", inputReader)
+	customBase2, name2, hiragana2, katakana2, hepburn2, hasPronunciation2, rawAliases2 := computeEmojiName("path/to/犬@dog.png", true, "pref_", "_suff", inputReader)
 	if customBase2 != "pref_inu_suff" {
 		t.Errorf("expected customBase pref_inu_suff, got %s", customBase2)
 	}
 	if name2 != "inu" || hiragana2 != "いぬ" || katakana2 != "イヌ" || hepburn2 != "inu" || !hasPronunciation2 {
 		t.Errorf("unexpected outputs: name=%q, hiragana=%q, katakana=%q, hepburn=%q, hasPronunciation=%t", name2, hiragana2, katakana2, hepburn2, hasPronunciation2)
+	}
+	if len(rawAliases2) != 1 || rawAliases2[0] != "dog" {
+		t.Errorf("expected rawAliases ['dog'], got %v", rawAliases2)
+	}
+}
+
+func TestExpandAlias(t *testing.T) {
+	// Test hiragana input "ぬこ" -> ["ぬこ", "ヌコ", "nuko"]
+	exp1 := expandAlias("ぬこ")
+	expected1 := []string{"ぬこ", "ヌコ", "nuko"}
+	if len(exp1) != len(expected1) {
+		t.Fatalf("expected %d expanded aliases for 'ぬこ', got %d: %v", len(expected1), len(exp1), exp1)
+	}
+	for i, e := range expected1 {
+		if exp1[i] != e {
+			t.Errorf("expected exp1[%d] = %q, got %q", i, e, exp1[i])
+		}
+	}
+
+	// Test katakana input "ヌコ" -> ["ヌコ", "ぬこ", "nuko"]
+	exp2 := expandAlias("ヌコ")
+	expected2 := []string{"ヌコ", "ぬこ", "nuko"}
+	if len(exp2) != len(expected2) {
+		t.Fatalf("expected %d expanded aliases for 'ヌコ', got %d: %v", len(expected2), len(exp2), exp2)
+	}
+	for i, e := range expected2 {
+		if exp2[i] != e {
+			t.Errorf("expected exp2[%d] = %q, got %q", i, e, exp2[i])
+		}
+	}
+
+	// Test English input "cat" -> ["cat"]
+	exp3 := expandAlias("cat")
+	if len(exp3) != 1 || exp3[0] != "cat" {
+		t.Errorf("expected ['cat'], got %v", exp3)
 	}
 }
 

@@ -211,15 +211,9 @@ func main() {
 			normalName := namePrefix + base + nameSuffix
 			addCandidate(normalName)
 
-			// 2. ZIP names (with conversion and aliases)
-			zipBase, _, hiragana, katakana, hepburn, hasPronunciation := computeEmojiName(filePath, true, namePrefix, nameSuffix, reader)
+			// 2. ZIP main name
+			zipBase, _, _, _, _, _, _ := computeEmojiName(filePath, true, namePrefix, nameSuffix, reader)
 			addCandidate(zipBase)
-
-			if hasPronunciation {
-				addCandidate(hiragana)
-				addCandidate(katakana)
-				addCandidate(hepburn)
-			}
 
 			// Map each unique candidate name to this file path
 			for _, candidate := range uniqueCandidates {
@@ -350,7 +344,7 @@ func main() {
 		displayPath := filepath.Clean(filePath)
 		fmt.Printf("Processing %s ... ", displayPath)
 
-		customBase, name, hiragana, katakana, hepburn, hasPronunciation := computeEmojiName(filePath, zipMode, namePrefix, nameSuffix, reader)
+		customBase, name, hiragana, katakana, hepburn, hasPronunciation, rawAliases := computeEmojiName(filePath, zipMode, namePrefix, nameSuffix, reader)
 
 		destPath, skipped, err := processImage(filePath, outDir, size, suffix, noResize, rect, customBase, autoRect.Active, autoRect.Ratio, skip, noResizeIfSmall)
 		if err != nil {
@@ -405,6 +399,11 @@ func main() {
 					aliases = addUnique(aliases, katakana)
 					if name != hepburn {
 						aliases = addUnique(aliases, hepburn)
+					}
+				}
+				for _, extra := range rawAliases {
+					for _, exp := range expandAlias(extra) {
+						aliases = addUnique(aliases, exp)
 					}
 				}
 

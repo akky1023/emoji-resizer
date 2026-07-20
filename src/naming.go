@@ -7,9 +7,20 @@ import (
 	"strings"
 )
 
-func computeEmojiName(filePath string, zipMode bool, namePrefix string, nameSuffix string, reader *bufio.Reader) (customBase string, name string, hiragana string, katakana string, hepburn string, hasPronunciation bool) {
+func computeEmojiName(filePath string, zipMode bool, namePrefix string, nameSuffix string, reader *bufio.Reader) (customBase string, name string, hiragana string, katakana string, hepburn string, hasPronunciation bool, rawAliases []string) {
 	ext := filepath.Ext(filePath)
-	base := strings.TrimSuffix(filepath.Base(filePath), ext)
+	rawBase := strings.TrimSuffix(filepath.Base(filePath), ext)
+
+	parts := strings.Split(rawBase, "@")
+	base := parts[0]
+	if len(parts) > 1 {
+		for _, a := range parts[1:] {
+			trimmed := strings.TrimSpace(a)
+			if trimmed != "" {
+				rawAliases = append(rawAliases, trimmed)
+			}
+		}
+	}
 
 	if zipMode {
 		if isPureHiraganaOrSafe(base) {
@@ -43,7 +54,28 @@ func computeEmojiName(filePath string, zipMode bool, namePrefix string, nameSuff
 		}
 		customBase = namePrefix + name + nameSuffix
 	} else {
-		customBase = namePrefix + base + nameSuffix
+		customBase = namePrefix + rawBase + nameSuffix
 	}
-	return customBase, name, hiragana, katakana, hepburn, hasPronunciation
+	return customBase, name, hiragana, katakana, hepburn, hasPronunciation, rawAliases
+}
+
+func expandAlias(alias string) []string {
+	var results []string
+	results = addUnique(results, alias)
+
+	hira := katakanaToHiragana(alias)
+	kata := hiraganaToKatakana(alias)
+
+	if isPureHiraganaOrSafe(hira) {
+		results = addUnique(results, hira)
+		results = addUnique(results, kata)
+		kunrei, hepburn := hiraganaToRomaji(hira)
+		if kunrei != "" {
+			results = addUnique(results, strings.ToLower(kunrei))
+		}
+		if hepburn != "" {
+			results = addUnique(results, strings.ToLower(hepburn))
+		}
+	}
+	return results
 }
