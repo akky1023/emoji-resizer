@@ -1,6 +1,6 @@
 {
   "name": "emoji-resizer",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "description": "カスタム絵文字用 画像一括整形・リサイズツール",
   "main": "src/main.go",
   "scripts": {
