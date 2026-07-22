@@ -7,9 +7,85 @@ import (
 	"strings"
 )
 
-func computeEmojiName(filePath string, zipMode bool, namePrefix string, nameSuffix string, reader *bufio.Reader) (customBase string, name string, hiragana string, katakana string, hepburn string, hasPronunciation bool, rawAliases []string) {
+type FilenameOptionResult struct {
+	HasR                bool
+	HasS                bool
+	HasInvalidOptionPos bool
+	RawOpt              string
+	CleanRawBase        string
+}
+
+func isValidOptionString(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	for _, ch := range s {
+		lower := strings.ToLower(string(ch))
+		if lower != "r" && lower != "s" {
+			return false
+		}
+	}
+	return true
+}
+
+func parseFilenameOption(filePath string) FilenameOptionResult {
 	ext := filepath.Ext(filePath)
 	rawBase := strings.TrimSuffix(filepath.Base(filePath), ext)
+
+	res := FilenameOptionResult{
+		CleanRawBase: rawBase,
+	}
+
+	work := rawBase
+	for {
+		idx := strings.LastIndex(work, ".")
+		if idx == -1 || idx == len(work)-1 {
+			break
+		}
+		optStr := work[idx+1:]
+		if !isValidOptionString(optStr) {
+			break
+		}
+
+		res.RawOpt = optStr + res.RawOpt
+		optLower := strings.ToLower(optStr)
+		if strings.Contains(optLower, "r") {
+			res.HasR = true
+		}
+		if strings.Contains(optLower, "s") {
+			res.HasS = true
+		}
+
+		work = work[:idx]
+	}
+
+	res.CleanRawBase = work
+
+	parts := strings.Split(work, "@")
+	for _, part := range parts {
+		idx := strings.LastIndex(part, ".")
+		if idx != -1 && idx < len(part)-1 {
+			optStr := part[idx+1:]
+			if isValidOptionString(optStr) {
+				res.HasInvalidOptionPos = true
+				break
+			}
+		}
+	}
+
+	return res
+}
+
+func computeEmojiName(filePath string, zipMode bool, namePrefix string, nameSuffix string, reader *bufio.Reader, filenameOption bool) (customBase string, name string, hiragana string, katakana string, hepburn string, hasPronunciation bool, rawAliases []string) {
+	ext := filepath.Ext(filePath)
+	rawBase := strings.TrimSuffix(filepath.Base(filePath), ext)
+
+	if filenameOption {
+		fnOpt := parseFilenameOption(filePath)
+		if fnOpt.CleanRawBase != "" {
+			rawBase = fnOpt.CleanRawBase
+		}
+	}
 
 	parts := strings.Split(rawBase, "@")
 	base := parts[0]

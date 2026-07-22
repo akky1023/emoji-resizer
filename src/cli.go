@@ -25,6 +25,7 @@ type appOptions struct {
 	autoRect        AutoRectValue
 	skip            bool
 	checkMode       bool
+	filenameOption  bool
 	cfgCategory     string
 	cfgLicense      string
 	category        string
@@ -77,6 +78,7 @@ func parseOptions() (*appOptions, []string, error) {
 	flag.Var(&opts.autoRect, "auto-rect", "automatically use rect mode if aspect ratio exceeds threshold (defaults to golden ratio ~1.618)")
 	flag.BoolVar(&opts.skip, "skip", false, "skip resizing if the destination file already exists")
 	flag.BoolVar(&opts.checkMode, "check", false, "check for duplicate emoji names after conversion")
+	flag.BoolVar(&opts.filenameOption, "filename-option", false, "enable parsing per-file options from filename like name.(option).ext")
 
 	flag.Parse()
 
@@ -90,6 +92,7 @@ func parseOptions() (*appOptions, []string, error) {
 		&opts.size, &opts.outDir, &opts.suffix, &opts.namePrefix, &opts.nameSuffix,
 		&opts.recursive, &opts.noResize, &opts.rect, &opts.zipMode, &opts.skip,
 		&opts.autoRect, &opts.cfgCategory, &opts.cfgLicense, &opts.noResizeIfSmall,
+		&opts.filenameOption,
 	); err != nil {
 		return nil, nil, err
 	}

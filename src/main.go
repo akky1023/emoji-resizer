@@ -37,8 +37,22 @@ func main() {
 		return
 	}
 
+	if opts.filenameOption {
+		for _, file := range filesToProcess {
+			fnOpt := parseFilenameOption(file)
+			if fnOpt.HasInvalidOptionPos {
+				fmt.Fprintf(os.Stderr, "Error: invalid filename option position in %s: option must be placed at the end before extension (e.g. name@alias.option.ext)\n", file)
+				os.Exit(1)
+			}
+			if fnOpt.HasR && fnOpt.HasS {
+				fmt.Fprintf(os.Stderr, "Error: invalid filename option in %s: 'r' and 's' cannot be specified together\n", file)
+				os.Exit(1)
+			}
+		}
+	}
+
 	if opts.checkMode {
-		executeCheckMode(filesToProcess, opts.zipMode, opts.namePrefix, opts.nameSuffix, reader)
+		executeCheckMode(filesToProcess, opts.zipMode, opts.namePrefix, opts.nameSuffix, reader, opts.filenameOption)
 		return
 	}
 

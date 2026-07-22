@@ -623,13 +623,14 @@ func TestParseAndApplyConfig(t *testing.T) {
 	rect := false
 	zipMode := false
 	skip := false
+	filenameOption := false
 	var autoRect AutoRectValue
 	var cfgCategory string
 	var cfgLicense string
 
 	seenFlags := make(map[string]bool)
 
-	err = parseAndApplyConfig(cfgPath, seenFlags, &size, &outDir, &suffix, &namePrefix, &nameSuffix, &recursive, &noResize, &rect, &zipMode, &skip, &autoRect, &cfgCategory, &cfgLicense, &noResizeIfSmall)
+	err = parseAndApplyConfig(cfgPath, seenFlags, &size, &outDir, &suffix, &namePrefix, &nameSuffix, &recursive, &noResize, &rect, &zipMode, &skip, &autoRect, &cfgCategory, &cfgLicense, &noResizeIfSmall, &filenameOption)
 	if err != nil {
 		t.Fatalf("parseAndApplyConfig failed: %v", err)
 	}
@@ -686,7 +687,7 @@ func TestParseAndApplyConfig(t *testing.T) {
 		"out":  true,
 	}
 
-	err = parseAndApplyConfig(cfgPath, seenFlags, &size, &outDir, &suffix, &namePrefix, &nameSuffix, &recursive, &noResize, &rect, &zipMode, &skip, &autoRect, &cfgCategory, &cfgLicense, &noResizeIfSmall)
+	err = parseAndApplyConfig(cfgPath, seenFlags, &size, &outDir, &suffix, &namePrefix, &nameSuffix, &recursive, &noResize, &rect, &zipMode, &skip, &autoRect, &cfgCategory, &cfgLicense, &noResizeIfSmall, &filenameOption)
 	if err != nil {
 		t.Fatalf("parseAndApplyConfig override run failed: %v", err)
 	}
@@ -702,7 +703,7 @@ func TestParseAndApplyConfig(t *testing.T) {
 
 func TestComputeEmojiName(t *testing.T) {
 	// Test computeEmojiName without zipMode
-	customBase, name, hiragana, katakana, hepburn, hasPronunciation, rawAliases := computeEmojiName("path/to/ねこ.png", false, "pref_", "_suff", nil)
+	customBase, name, hiragana, katakana, hepburn, hasPronunciation, rawAliases := computeEmojiName("path/to/ねこ.png", false, "pref_", "_suff", nil, false)
 	if customBase != "pref_ねこ_suff" {
 		t.Errorf("expected customBase pref_ねこ_suff, got %s", customBase)
 	}
@@ -716,7 +717,7 @@ func TestComputeEmojiName(t *testing.T) {
 	_ = hasPronunciation
 
 	// Test computeEmojiName with zipMode (pure hiragana)
-	customBase, name, hiragana, katakana, hepburn, hasPronunciation, rawAliases = computeEmojiName("path/to/ねこ.png", true, "pref_", "_suff", nil)
+	customBase, name, hiragana, katakana, hepburn, hasPronunciation, rawAliases = computeEmojiName("path/to/ねこ.png", true, "pref_", "_suff", nil, false)
 	if customBase != "pref_neko_suff" {
 		t.Errorf("expected customBase pref_neko_suff, got %s", customBase)
 	}
@@ -728,7 +729,7 @@ func TestComputeEmojiName(t *testing.T) {
 	}
 
 	// Test computeEmojiName with zipMode and '@' manual aliases
-	customBaseAlias, nameAlias, hiraganaAlias, katakanaAlias, hepburnAlias, hasPronunciationAlias, rawAliasesAlias := computeEmojiName("path/to/ねこ@cat@kitty.png", true, "pref_", "_suff", nil)
+	customBaseAlias, nameAlias, hiraganaAlias, katakanaAlias, hepburnAlias, hasPronunciationAlias, rawAliasesAlias := computeEmojiName("path/to/ねこ@cat@kitty.png", true, "pref_", "_suff", nil, false)
 	if customBaseAlias != "pref_neko_suff" {
 		t.Errorf("expected customBase pref_neko_suff, got %s", customBaseAlias)
 	}
@@ -741,7 +742,7 @@ func TestComputeEmojiName(t *testing.T) {
 
 	// Test computeEmojiName with zipMode (contains Japanese, requiring prompt)
 	inputReader := bufio.NewReader(strings.NewReader("いぬ\n"))
-	customBase2, name2, hiragana2, katakana2, hepburn2, hasPronunciation2, rawAliases2 := computeEmojiName("path/to/犬@dog.png", true, "pref_", "_suff", inputReader)
+	customBase2, name2, hiragana2, katakana2, hepburn2, hasPronunciation2, rawAliases2 := computeEmojiName("path/to/犬@dog.png", true, "pref_", "_suff", inputReader, false)
 	if customBase2 != "pref_inu_suff" {
 		t.Errorf("expected customBase pref_inu_suff, got %s", customBase2)
 	}
@@ -1088,6 +1089,107 @@ func TestProcessImageNoResizeIfSmall(t *testing.T) {
 		t.Errorf("expected 128x256 (rect, resized since 150 >= 128), got %dx%d", ri6.Bounds().Dx(), ri6.Bounds().Dy())
 	}
 }
+
+func TestParseFilenameOption(t *testing.T) {
+	tests := []struct {
+		path                 string
+		expectedR            bool
+		expectedS            bool
+		expectedInvalidPos   bool
+		expectedBase         string
+	}{
+		{"cat.r.png", true, false, false, "cat"},
+		{"cat.s.png", false, true, false, "cat"},
+		{"cat.rs.png", true, true, false, "cat"},
+		{"cat.sr.png", true, true, false, "cat"},
+		{"cat.r.s.png", true, true, false, "cat"},
+		{"cat@alias.r.png", true, false, false, "cat@alias"},
+		{"ねこ.r.png", true, false, false, "ねこ"},
+		{"ねこ@ぬこ.r.png", true, false, false, "ねこ@ぬこ"},
+		{"ねこ.r@ぬこ.png", false, false, true, "ねこ.r@ぬこ"},
+		{"ねこ.r@ぬこ.s.png", false, true, true, "ねこ.r@ぬこ"},
+		{"simple.png", false, false, false, "simple"},
+		{"file.cat.png", false, false, false, "file.cat"},
+	}
+
+	for _, tt := range tests {
+		res := parseFilenameOption(tt.path)
+		if res.HasR != tt.expectedR || res.HasS != tt.expectedS || res.HasInvalidOptionPos != tt.expectedInvalidPos || res.CleanRawBase != tt.expectedBase {
+			t.Errorf("parseFilenameOption(%q) = {HasR:%t, HasS:%t, HasInvalidOptionPos:%t, CleanRawBase:%q}; want {HasR:%t, HasS:%t, HasInvalidOptionPos:%t, CleanRawBase:%q}",
+				tt.path, res.HasR, res.HasS, res.HasInvalidOptionPos, res.CleanRawBase,
+				tt.expectedR, tt.expectedS, tt.expectedInvalidPos, tt.expectedBase)
+		}
+	}
+}
+
+func TestFilenameOptionProcessing(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "emoji-filename-opt-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Create a 100x200 (vertical rectangle) image file named 'item.r.png'
+	img := image.NewRGBA(image.Rect(0, 0, 100, 200))
+	srcR := filepath.Join(tmpDir, "item.r.png")
+	f1, _ := os.Create(srcR)
+	png.Encode(f1, img)
+	f1.Close()
+
+	// Create a 100x200 image file named 'item.s.png'
+	srcS := filepath.Join(tmpDir, "item.s.png")
+	f2, _ := os.Create(srcS)
+	png.Encode(f2, img)
+	f2.Close()
+
+	// 1. Process item.r.png with default opts (rect=false), but filenameOption=true.
+	// .r should force rect mode (width short side 128, height 256).
+	// Output file name should be 'item.png'
+	optsR := &appOptions{
+		filenameOption: true,
+		size:           128,
+		outDir:         filepath.Join(tmpDir, "out_r"),
+	}
+	resRCount, _, _, _, _ := processBatchImages([]string{srcR}, optsR, nil, tmpDir)
+	if resRCount != 1 {
+		t.Fatalf("processBatchImages failed for srcR")
+	}
+	outPathR := filepath.Join(optsR.outDir, "item.png")
+	fR, err := os.Open(outPathR)
+	if err != nil {
+		t.Fatalf("failed to open output image for .r: %v", err)
+	}
+	imgR, _ := png.Decode(fR)
+	fR.Close()
+	if imgR.Bounds().Dx() != 128 || imgR.Bounds().Dy() != 256 {
+		t.Errorf("expected .r option to force rect 128x256, got %dx%d", imgR.Bounds().Dx(), imgR.Bounds().Dy())
+	}
+
+	// 2. Process item.s.png with rect=true, but filenameOption=true.
+	// .s should force square mode (128x128).
+	// Output file name should be 'item.png'
+	optsS := &appOptions{
+		filenameOption: true,
+		rect:           true,
+		size:           128,
+		outDir:         filepath.Join(tmpDir, "out_s"),
+	}
+	resSCount, _, _, _, _ := processBatchImages([]string{srcS}, optsS, nil, tmpDir)
+	if resSCount != 1 {
+		t.Fatalf("processBatchImages failed for srcS")
+	}
+	outPathS := filepath.Join(optsS.outDir, "item.png")
+	fS, err := os.Open(outPathS)
+	if err != nil {
+		t.Fatalf("failed to open output image for .s: %v", err)
+	}
+	imgS, _ := png.Decode(fS)
+	fS.Close()
+	if imgS.Bounds().Dx() != 128 || imgS.Bounds().Dy() != 128 {
+		t.Errorf("expected .s option to force square 128x128, got %dx%d", imgS.Bounds().Dx(), imgS.Bounds().Dy())
+	}
+}
+
 
 
 

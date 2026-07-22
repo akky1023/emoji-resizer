@@ -58,12 +58,14 @@ type Config struct {
 	Skip            *bool       `json:"skip"`
 	Category        *string     `json:"category"`
 	License         *string     `json:"license"`
+	FilenameOption  *bool       `json:"filename_option"`
 }
 
 func parseAndApplyConfig(configPath string, seenFlags map[string]bool,
 	size *int, outDir *string, suffix *string, namePrefix *string, nameSuffix *string,
 	recursive *bool, noResize *bool, rect *bool, zipMode *bool, skip *bool,
-	autoRect *AutoRectValue, cfgCategory *string, cfgLicense *string, noResizeIfSmall *bool) error {
+	autoRect *AutoRectValue, cfgCategory *string, cfgLicense *string, noResizeIfSmall *bool,
+	filenameOption *bool) error {
 
 	var shouldLoadConfig bool
 	var finalConfigPath string
@@ -121,6 +123,9 @@ func parseAndApplyConfig(configPath string, seenFlags map[string]bool,
 	}
 	if cfg.Skip != nil && !seenFlags["skip"] {
 		*skip = *cfg.Skip
+	}
+	if cfg.FilenameOption != nil && !seenFlags["filename-option"] {
+		*filenameOption = *cfg.FilenameOption
 	}
 	if cfg.Category != nil {
 		*cfgCategory = *cfg.Category

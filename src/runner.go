@@ -52,7 +52,7 @@ func collectFilesToProcess(args []string, recursive bool, outDir, absOutDir stri
 }
 
 // executeCheckMode checks for duplicate emoji names and exits.
-func executeCheckMode(filesToProcess []string, zipMode bool, namePrefix, nameSuffix string, reader *bufio.Reader) {
+func executeCheckMode(filesToProcess []string, zipMode bool, namePrefix, nameSuffix string, reader *bufio.Reader, filenameOption bool) {
 	nameToPaths := make(map[string][]string)
 	var candidateNamesOrdered []string
 
@@ -72,11 +72,17 @@ func executeCheckMode(filesToProcess []string, zipMode bool, namePrefix, nameSuf
 		// 1. Normal name (prefixed and suffixed)
 		ext := filepath.Ext(filePath)
 		base := strings.TrimSuffix(filepath.Base(filePath), ext)
+		if filenameOption {
+			fnOpt := parseFilenameOption(filePath)
+			if fnOpt.CleanRawBase != "" {
+				base = fnOpt.CleanRawBase
+			}
+		}
 		normalName := namePrefix + base + nameSuffix
 		addCandidate(normalName)
 
 		// 2. ZIP main name
-		zipBase, _, _, _, _, _, _ := computeEmojiName(filePath, true, namePrefix, nameSuffix, reader)
+		zipBase, _, _, _, _, _, _ := computeEmojiName(filePath, true, namePrefix, nameSuffix, reader, filenameOption)
 		addCandidate(zipBase)
 
 		for _, candidate := range uniqueCandidates {
@@ -212,12 +218,26 @@ func processBatchImages(filesToProcess []string, opts *appOptions, reader *bufio
 		fmt.Printf("Processing %s ... ", displayPath)
 
 		customBase, name, hiragana, katakana, hepburn, hasPronunciation, rawAliases := computeEmojiName(
-			filePath, opts.zipMode, opts.namePrefix, opts.nameSuffix, reader,
+			filePath, opts.zipMode, opts.namePrefix, opts.nameSuffix, reader, opts.filenameOption,
 		)
 
+		actualRect := opts.rect
+		actualAutoRectActive := opts.autoRect.Active
+
+		if opts.filenameOption {
+			fnOpt := parseFilenameOption(filePath)
+			if fnOpt.HasR {
+				actualRect = true
+				actualAutoRectActive = false
+			} else if fnOpt.HasS {
+				actualRect = false
+				actualAutoRectActive = false
+			}
+		}
+
 		destPath, skipped, err := processImage(
-			filePath, opts.outDir, opts.size, opts.suffix, opts.noResize, opts.rect,
-			customBase, opts.autoRect.Active, opts.autoRect.Ratio, opts.skip, opts.noResizeIfSmall,
+			filePath, opts.outDir, opts.size, opts.suffix, opts.noResize, actualRect,
+			customBase, actualAutoRectActive, opts.autoRect.Ratio, opts.skip, opts.noResizeIfSmall,
 		)
 
 		if err != nil {
