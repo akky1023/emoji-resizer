@@ -595,7 +595,7 @@ func TestParseAndApplyConfig(t *testing.T) {
 		"suffix": "_configured",
 		"name_prefix": "conf_pref_",
 		"name_suffix": "_conf_suf",
-		"r": true,
+		"recursive": true,
 		"no_resize": true,
 		"no_resize_if_small": true,
 		"rect": true,

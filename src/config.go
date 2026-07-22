@@ -49,7 +49,7 @@ type Config struct {
 	Suffix          *string     `json:"suffix"`
 	NamePrefix      *string     `json:"name_prefix"`
 	NameSuffix      *string     `json:"name_suffix"`
-	Recursive       *bool       `json:"r"`
+	Recursive       *bool       `json:"recursive"`
 	NoResize        *bool       `json:"no_resize"`
 	NoResizeIfSmall *bool       `json:"no_resize_if_small"`
 	Rect            *bool       `json:"rect"`
@@ -106,7 +106,7 @@ func parseAndApplyConfig(configPath string, seenFlags map[string]bool,
 	if cfg.NameSuffix != nil && !seenFlags["name-suffix"] {
 		*nameSuffix = *cfg.NameSuffix
 	}
-	if cfg.Recursive != nil && !seenFlags["r"] {
+	if cfg.Recursive != nil && !seenFlags["recursive"] {
 		*recursive = *cfg.Recursive
 	}
 	if cfg.NoResize != nil && !seenFlags["no-resize"] {

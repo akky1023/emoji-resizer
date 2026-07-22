@@ -47,7 +47,7 @@ go build -o emoji-resizer.exe ./src
 | `-suffix` | `なし` | 出力ファイル名に付与する接尾辞 | |
 | `-name-prefix` | `なし` | 絵文字名の前に付与する接頭辞 | `-zip`時のみ意味があります |
 | `-name-suffix` | `なし` | 絵文字名の後ろに付与する接尾辞 | `-zip`時のみ意味があります |
-| `-r` | `false` | 指定したディレクトリ以下のディレクトリもすべて調べる | |
+| `-recursive` | `false` | 指定したディレクトリ以下のディレクトリもすべて調べる | |
 | `-no-resize` | `false` | 正方形にして終了．圧縮しない |  `-rect`指定時はなにもしない |
 | `-no-resize-if-small` | `false` | size以下なら圧縮しない． | |
 | `-zip` | `false` | Misskey一括インポート用ZIPアーカイブ (`emojis.zip`) を生成する | ファイル名をひらがなにしておくとエイリアスがある程度自動補完されます |
@@ -89,7 +89,7 @@ go build -o emoji-resizer.exe ./src
   "suffix": "_resized",
   "name_prefix": "pref_",
   "name_suffix": "_suf",
-  "r": true,
+  "recursive": true,
   "no_resize": false,
   "no_resise_if_small": false,
   "rect": false,

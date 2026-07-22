@@ -69,7 +69,7 @@ func parseOptions() (*appOptions, []string, error) {
 	flag.StringVar(&opts.namePrefix, "name-prefix", "", "prefix to prepend to the emoji name")
 	flag.StringVar(&opts.nameSuffix, "name-suffix", "", "suffix to append to the emoji name")
 	flag.StringVar(&opts.configPath, "config", "", "path to config file (default: './config.json' if exists)")
-	flag.BoolVar(&opts.recursive, "r", false, "recursively scan directories")
+	flag.BoolVar(&opts.recursive, "recursive", false, "recursively scan directories")
 	flag.BoolVar(&opts.noResize, "no-resize", false, "skip final resizing and keep the original square dimensions")
 	flag.BoolVar(&opts.noResizeIfSmall, "no-resize-if-small", false, "skip resizing if the image is already smaller than the target size")
 	flag.BoolVar(&opts.rect, "rect", false, "resize rectangle keeping aspect ratio, short side matches target size (no padding)")
