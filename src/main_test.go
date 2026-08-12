@@ -3,6 +3,8 @@ package main
 import (
 	"bufio"
 	"image"
+	"image/color"
+	"image/draw"
 	"image/png"
 	"os"
 	"os/exec"
@@ -38,7 +40,7 @@ func TestProcessImageRect(t *testing.T) {
 	// Target size: 128x128
 	// Output should be a 128x128 square image.
 	outDir1 := filepath.Join(tmpDir, "out1")
-	_, _, err = processImage(srcPath, outDir1, 128, "", false, false, "", false, 0, false, false)
+	_, _, err = processImage(srcPath, outDir1, 128, "", false, false, "", false, 0, false, false, false, false)
 	if err != nil {
 		t.Errorf("processImage (rect=false) failed: %v", err)
 	}
@@ -61,7 +63,7 @@ func TestProcessImageRect(t *testing.T) {
 	// Target size: 128 (short side matches 128)
 	// Since w < h (100 < 200), width (short side) should become 128, and height should scale to 256.
 	outDir2 := filepath.Join(tmpDir, "out2")
-	_, _, err = processImage(srcPath, outDir2, 128, "", false, true, "", false, 0, false, false)
+	_, _, err = processImage(srcPath, outDir2, 128, "", false, true, "", false, 0, false, false, false, false)
 	if err != nil {
 		t.Errorf("processImage (rect=true, vertical) failed: %v", err)
 	}
@@ -98,7 +100,7 @@ func TestProcessImageRect(t *testing.T) {
 	// Target size: 128 (short side matches 128)
 	// Since h3 < w3 (150 < 300), height (short side) should become 128, and width should scale to 256.
 	outDir3 := filepath.Join(tmpDir, "out3")
-	_, _, err = processImage(srcPath3, outDir3, 128, "", false, true, "", false, 0, false, false)
+	_, _, err = processImage(srcPath3, outDir3, 128, "", false, true, "", false, 0, false, false, false, false)
 	if err != nil {
 		t.Errorf("processImage (rect=true, horizontal) failed: %v", err)
 	}
@@ -236,7 +238,7 @@ func TestProcessImageAutoRect(t *testing.T) {
 	f1.Close()
 
 	outDir1 := filepath.Join(tmpDir, "out1")
-	outPath1, _, err := processImage(srcPath1, outDir1, 128, "", false, false, "", true, 0, false, false)
+	outPath1, _, err := processImage(srcPath1, outDir1, 128, "", false, false, "", true, 0, false, false, false, false)
 	if err != nil {
 		t.Fatalf("failed to process image 1: %v", err)
 	}
@@ -256,7 +258,7 @@ func TestProcessImageAutoRect(t *testing.T) {
 	f2.Close()
 
 	outDir2 := filepath.Join(tmpDir, "out2")
-	outPath2, _, err := processImage(srcPath2, outDir2, 128, "", false, false, "", true, 0, false, false)
+	outPath2, _, err := processImage(srcPath2, outDir2, 128, "", false, false, "", true, 0, false, false, false, false)
 	if err != nil {
 		t.Fatalf("failed to process image 2: %v", err)
 	}
@@ -270,7 +272,7 @@ func TestProcessImageAutoRect(t *testing.T) {
 	// Case 3: 100x200 (ratio 2.0) with custom ratio threshold = 2.5 (2.0 < 2.5).
 	// It should NOT trigger rect mode -> processed as square (128x128).
 	outDir3 := filepath.Join(tmpDir, "out3")
-	outPath3, _, err := processImage(srcPath2, outDir3, 128, "", false, false, "", true, 2.5, false, false)
+	outPath3, _, err := processImage(srcPath2, outDir3, 128, "", false, false, "", true, 2.5, false, false, false, false)
 	if err != nil {
 		t.Fatalf("failed to process image 3: %v", err)
 	}
@@ -284,7 +286,7 @@ func TestProcessImageAutoRect(t *testing.T) {
 	// Case 4: 100x200 (ratio 2.0) with custom ratio threshold = 1.5 (2.0 > 1.5).
 	// It SHOULD trigger rect mode -> processed as rect (128x256).
 	outDir4 := filepath.Join(tmpDir, "out4")
-	outPath4, _, err := processImage(srcPath2, outDir4, 128, "", false, false, "", true, 1.5, false, false)
+	outPath4, _, err := processImage(srcPath2, outDir4, 128, "", false, false, "", true, 1.5, false, false, false, false)
 	if err != nil {
 		t.Fatalf("failed to process image 4: %v", err)
 	}
@@ -342,7 +344,7 @@ func TestRecursiveZipMode(t *testing.T) {
 	var allEmojiEntries []MisskeyEmojiEntry
 
 	for _, filePath := range filesToProcess {
-		destPath, _, err := processImage(filePath, "", 128, "", false, false, "", false, 0, false, false)
+		destPath, _, err := processImage(filePath, "", 128, "", false, false, "", false, 0, false, false, false, false)
 		if err != nil {
 			t.Fatalf("processImage failed for %s: %v", filePath, err)
 		}
@@ -456,7 +458,7 @@ func TestProcessImageSkipExist(t *testing.T) {
 
 	// 1. Process with skipExist = false (should create the output file)
 	outDir := filepath.Join(tmpDir, "out")
-	outPath, skipped, err := processImage(srcPath, outDir, 128, "", false, false, "", false, 0, false, false)
+	outPath, skipped, err := processImage(srcPath, outDir, 128, "", false, false, "", false, 0, false, false, false, false)
 	if err != nil {
 		t.Fatalf("first processImage failed: %v", err)
 	}
@@ -471,7 +473,7 @@ func TestProcessImageSkipExist(t *testing.T) {
 	}
 
 	// 2. Process with skipExist = true (should skip and NOT overwrite)
-	_, skipped2, err := processImage(srcPath, outDir, 128, "", false, false, "", false, 0, true, false)
+	_, skipped2, err := processImage(srcPath, outDir, 128, "", false, false, "", false, 0, true, false, false, false)
 	if err != nil {
 		t.Fatalf("second processImage failed: %v", err)
 	}
@@ -536,7 +538,7 @@ func TestNamePrefixSuffixZipMode(t *testing.T) {
 	customBase := namePrefix + name + nameSuffix
 
 	// Run processImage
-	destPath, _, err := processImage(imgPath, tmpDir, 128, "", false, false, customBase, false, 0, false, false)
+	destPath, _, err := processImage(imgPath, tmpDir, 128, "", false, false, customBase, false, 0, false, false, false, false)
 	if err != nil {
 		t.Fatalf("processImage failed: %v", err)
 	}
@@ -621,6 +623,8 @@ func TestParseAndApplyConfig(t *testing.T) {
 	noResize := false
 	noResizeIfSmall := false
 	rect := false
+	trim := false
+	trimOpaque := false
 	zipMode := false
 	skip := false
 	filenameOption := false
@@ -630,7 +634,7 @@ func TestParseAndApplyConfig(t *testing.T) {
 
 	seenFlags := make(map[string]bool)
 
-	err = parseAndApplyConfig(cfgPath, seenFlags, &size, &outDir, &suffix, &namePrefix, &nameSuffix, &recursive, &noResize, &rect, &zipMode, &skip, &autoRect, &cfgCategory, &cfgLicense, &noResizeIfSmall, &filenameOption)
+	err = parseAndApplyConfig(cfgPath, seenFlags, &size, &outDir, &suffix, &namePrefix, &nameSuffix, &recursive, &noResize, &rect, &zipMode, &skip, &autoRect, &cfgCategory, &cfgLicense, &noResizeIfSmall, &filenameOption, &trim, &trimOpaque)
 	if err != nil {
 		t.Fatalf("parseAndApplyConfig failed: %v", err)
 	}
@@ -687,7 +691,7 @@ func TestParseAndApplyConfig(t *testing.T) {
 		"out":  true,
 	}
 
-	err = parseAndApplyConfig(cfgPath, seenFlags, &size, &outDir, &suffix, &namePrefix, &nameSuffix, &recursive, &noResize, &rect, &zipMode, &skip, &autoRect, &cfgCategory, &cfgLicense, &noResizeIfSmall, &filenameOption)
+	err = parseAndApplyConfig(cfgPath, seenFlags, &size, &outDir, &suffix, &namePrefix, &nameSuffix, &recursive, &noResize, &rect, &zipMode, &skip, &autoRect, &cfgCategory, &cfgLicense, &noResizeIfSmall, &filenameOption, &trim, &trimOpaque)
 	if err != nil {
 		t.Fatalf("parseAndApplyConfig override run failed: %v", err)
 	}
@@ -994,7 +998,7 @@ func TestProcessImageNoResizeIfSmall(t *testing.T) {
 	// 1. Without rect, targetSize = 128
 	// max(w, h) = 100 <= 128. With noResizeIfSmall=true, it should NOT resize, but still pad to square -> 100x100.
 	outDir1 := filepath.Join(tmpDir, "out1")
-	outPath1, _, err := processImage(srcPath1, outDir1, 128, "", false, false, "", false, 0, false, true)
+	outPath1, _, err := processImage(srcPath1, outDir1, 128, "", false, false, "", false, 0, false, true, false, false)
 	if err != nil {
 		t.Fatalf("failed to process image 1: %v", err)
 	}
@@ -1008,7 +1012,7 @@ func TestProcessImageNoResizeIfSmall(t *testing.T) {
 	// 2. Without rect, targetSize = 128, but noResizeIfSmall=false (default).
 	// It should resize/pad to 128x128.
 	outDir2 := filepath.Join(tmpDir, "out2")
-	outPath2, _, err := processImage(srcPath1, outDir2, 128, "", false, false, "", false, 0, false, false)
+	outPath2, _, err := processImage(srcPath1, outDir2, 128, "", false, false, "", false, 0, false, false, false, false)
 	if err != nil {
 		t.Fatalf("failed to process image 2: %v", err)
 	}
@@ -1029,7 +1033,7 @@ func TestProcessImageNoResizeIfSmall(t *testing.T) {
 	// 3. With rect=true, targetSize = 128.
 	// short side = 100 < 128. With noResizeIfSmall=true, it should NOT resize -> kept as 100x200.
 	outDir3 := filepath.Join(tmpDir, "out3")
-	outPath3, _, err := processImage(srcPath3, outDir3, 128, "", false, true, "", false, 0, false, true)
+	outPath3, _, err := processImage(srcPath3, outDir3, 128, "", false, true, "", false, 0, false, true, false, false)
 	if err != nil {
 		t.Fatalf("failed to process image 3: %v", err)
 	}
@@ -1043,7 +1047,7 @@ func TestProcessImageNoResizeIfSmall(t *testing.T) {
 	// 4. With rect=true, targetSize = 128, noResizeIfSmall=false (default).
 	// short side = 100 < 128. It should resize to short side=128 -> 128x256.
 	outDir4 := filepath.Join(tmpDir, "out4")
-	outPath4, _, err := processImage(srcPath3, outDir4, 128, "", false, true, "", false, 0, false, false)
+	outPath4, _, err := processImage(srcPath3, outDir4, 128, "", false, true, "", false, 0, false, false, false, false)
 	if err != nil {
 		t.Fatalf("failed to process image 4: %v", err)
 	}
@@ -1057,7 +1061,7 @@ func TestProcessImageNoResizeIfSmall(t *testing.T) {
 	// 5. Without rect, targetSize = 128, image is 100x200.
 	// max(w, h) = 200 > 128. So it SHOULD resize to 128x128.
 	outDir5 := filepath.Join(tmpDir, "out5")
-	outPath5, _, err := processImage(srcPath3, outDir5, 128, "", false, false, "", false, 0, false, true)
+	outPath5, _, err := processImage(srcPath3, outDir5, 128, "", false, false, "", false, 0, false, true, false, false)
 	if err != nil {
 		t.Fatalf("failed to process image 5: %v", err)
 	}
@@ -1078,7 +1082,7 @@ func TestProcessImageNoResizeIfSmall(t *testing.T) {
 	// 6. With rect=true, targetSize = 128.
 	// short side = 150 >= 128. With noResizeIfSmall=true, it should STILL resize -> 128x256.
 	outDir6 := filepath.Join(tmpDir, "out6")
-	outPath6, _, err := processImage(srcPath6, outDir6, 128, "", false, true, "", false, 0, false, true)
+	outPath6, _, err := processImage(srcPath6, outDir6, 128, "", false, true, "", false, 0, false, true, false, false)
 	if err != nil {
 		t.Fatalf("failed to process image 6: %v", err)
 	}
@@ -1095,29 +1099,36 @@ func TestParseFilenameOption(t *testing.T) {
 		path                 string
 		expectedR            bool
 		expectedS            bool
+		expectedT            bool
 		expectedInvalidPos   bool
 		expectedBase         string
 	}{
-		{"cat.r.png", true, false, false, "cat"},
-		{"cat.s.png", false, true, false, "cat"},
-		{"cat.rs.png", true, true, false, "cat"},
-		{"cat.sr.png", true, true, false, "cat"},
-		{"cat.r.s.png", true, true, false, "cat"},
-		{"cat@alias.r.png", true, false, false, "cat@alias"},
-		{"ねこ.r.png", true, false, false, "ねこ"},
-		{"ねこ@ぬこ.r.png", true, false, false, "ねこ@ぬこ"},
-		{"ねこ.r@ぬこ.png", false, false, true, "ねこ.r@ぬこ"},
-		{"ねこ.r@ぬこ.s.png", false, true, true, "ねこ.r@ぬこ"},
-		{"simple.png", false, false, false, "simple"},
-		{"file.cat.png", false, false, false, "file.cat"},
+		{"cat.r.png", true, false, false, false, "cat"},
+		{"cat.s.png", false, true, false, false, "cat"},
+		{"cat.t.png", false, false, true, false, "cat"},
+		{"cat.rt.png", true, false, true, false, "cat"},
+		{"cat.tr.png", true, false, true, false, "cat"},
+		{"cat.ts.png", false, true, true, false, "cat"},
+		{"cat.r.t.png", true, false, true, false, "cat"},
+		{"cat.rs.png", true, true, false, false, "cat"},
+		{"cat.sr.png", true, true, false, false, "cat"},
+		{"cat.r.s.png", true, true, false, false, "cat"},
+		{"cat@alias.r.png", true, false, false, false, "cat@alias"},
+		{"ねこ.r.png", true, false, false, false, "ねこ"},
+		{"ねこ@ぬこ.r.png", true, false, false, false, "ねこ@ぬこ"},
+		{"ねこ.t@ぬこ.png", false, false, false, true, "ねこ.t@ぬこ"},
+		{"ねこ.r@ぬこ.png", false, false, false, true, "ねこ.r@ぬこ"},
+		{"ねこ.r@ぬこ.s.png", false, true, false, true, "ねこ.r@ぬこ"},
+		{"simple.png", false, false, false, false, "simple"},
+		{"file.cat.png", false, false, false, false, "file.cat"},
 	}
 
 	for _, tt := range tests {
 		res := parseFilenameOption(tt.path)
-		if res.HasR != tt.expectedR || res.HasS != tt.expectedS || res.HasInvalidOptionPos != tt.expectedInvalidPos || res.CleanRawBase != tt.expectedBase {
-			t.Errorf("parseFilenameOption(%q) = {HasR:%t, HasS:%t, HasInvalidOptionPos:%t, CleanRawBase:%q}; want {HasR:%t, HasS:%t, HasInvalidOptionPos:%t, CleanRawBase:%q}",
-				tt.path, res.HasR, res.HasS, res.HasInvalidOptionPos, res.CleanRawBase,
-				tt.expectedR, tt.expectedS, tt.expectedInvalidPos, tt.expectedBase)
+		if res.HasR != tt.expectedR || res.HasS != tt.expectedS || res.HasT != tt.expectedT || res.HasInvalidOptionPos != tt.expectedInvalidPos || res.CleanRawBase != tt.expectedBase {
+			t.Errorf("parseFilenameOption(%q) = {HasR:%t, HasS:%t, HasT:%t, HasInvalidOptionPos:%t, CleanRawBase:%q}; want {HasR:%t, HasS:%t, HasT:%t, HasInvalidOptionPos:%t, CleanRawBase:%q}",
+				tt.path, res.HasR, res.HasS, res.HasT, res.HasInvalidOptionPos, res.CleanRawBase,
+				tt.expectedR, tt.expectedS, tt.expectedT, tt.expectedInvalidPos, tt.expectedBase)
 		}
 	}
 }
@@ -1187,6 +1198,155 @@ func TestFilenameOptionProcessing(t *testing.T) {
 	fS.Close()
 	if imgS.Bounds().Dx() != 128 || imgS.Bounds().Dy() != 128 {
 		t.Errorf("expected .s option to force square 128x128, got %dx%d", imgS.Bounds().Dx(), imgS.Bounds().Dy())
+	}
+}
+
+func TestTrimImageUnit(t *testing.T) {
+	// 1. Transparent image test for trimImageTransparent: 200x200 canvas, transparent, with a 60x40 non-transparent rectangle at x=70..129, y=80..119
+	canvas1 := image.NewRGBA(image.Rect(0, 0, 200, 200))
+	for y := 80; y < 120; y++ {
+		for x := 70; x < 130; x++ {
+			canvas1.Set(x, y, color.RGBA{R: 255, G: 0, B: 0, A: 255})
+		}
+	}
+	trimmed1 := trimImageTransparent(canvas1)
+	b1 := trimmed1.Bounds()
+	if b1.Dx() != 60 || b1.Dy() != 40 {
+		t.Errorf("expected transparent trim to yield 60x40, got %dx%d", b1.Dx(), b1.Dy())
+	}
+
+	// 2. Opaque image test for trimImageTransparent: 200x200 canvas filled with white (no transparent pixels) -> MUST NOT crop
+	canvas2 := image.NewRGBA(image.Rect(0, 0, 200, 200))
+	draw.Draw(canvas2, canvas2.Bounds(), &image.Uniform{color.RGBA{255, 255, 255, 255}}, image.Point{}, draw.Src)
+	for y := 60; y < 140; y++ {
+		for x := 50; x < 90; x++ {
+			canvas2.Set(x, y, color.RGBA{R: 0, G: 0, B: 255, A: 255})
+		}
+	}
+	trimmed2 := trimImageTransparent(canvas2)
+	b2 := trimmed2.Bounds()
+	if b2.Dx() != 200 || b2.Dy() != 200 {
+		t.Errorf("expected transparent-only trim on opaque image to remain 200x200, got %dx%d", b2.Dx(), b2.Dy())
+	}
+
+	// 3. Opaque image test for trimImageOpaque: 200x200 canvas filled with white -> MUST crop to 40x80
+	trimmedOpaque := trimImageOpaque(canvas2)
+	bOpaque := trimmedOpaque.Bounds()
+	if bOpaque.Dx() != 40 || bOpaque.Dy() != 80 {
+		t.Errorf("expected opaque trim on solid bg to yield 40x80, got %dx%d", bOpaque.Dx(), bOpaque.Dy())
+	}
+
+	// 4. Already trimmed image test (no margins): 50x50 full color
+	canvas3 := image.NewRGBA(image.Rect(0, 0, 50, 50))
+	for y := 0; y < 50; y++ {
+		for x := 0; x < 50; x++ {
+			canvas3.Set(x, y, color.RGBA{R: 100, G: 100, B: 100, A: 255})
+		}
+	}
+	trimmed3 := trimImageTransparent(canvas3)
+	b3 := trimmed3.Bounds()
+	if b3.Dx() != 50 || b3.Dy() != 50 {
+		t.Errorf("expected no-margin image to remain 50x50, got %dx%d", b3.Dx(), b3.Dy())
+	}
+}
+
+func TestTrimProcessingIntegration(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "emoji-trim-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Create a 200x200 transparent PNG with a 50x100 content rectangle at center (x=75..124, y=50..149)
+	imgTrans := image.NewRGBA(image.Rect(0, 0, 200, 200))
+	for y := 50; y < 150; y++ {
+		for x := 75; x < 125; x++ {
+			imgTrans.Set(x, y, color.RGBA{R: 255, G: 0, B: 0, A: 255})
+		}
+	}
+
+	// Create a 200x200 solid white PNG with a 50x100 content rectangle at center
+	imgOpaque := image.NewRGBA(image.Rect(0, 0, 200, 200))
+	draw.Draw(imgOpaque, imgOpaque.Bounds(), &image.Uniform{color.RGBA{255, 255, 255, 255}}, image.Point{}, draw.Src)
+	for y := 50; y < 150; y++ {
+		for x := 75; x < 125; x++ {
+			imgOpaque.Set(x, y, color.RGBA{R: 255, G: 0, B: 0, A: 255})
+		}
+	}
+
+	srcNormalTrans := filepath.Join(tmpDir, "normal_trans.png")
+	f1, _ := os.Create(srcNormalTrans)
+	png.Encode(f1, imgTrans)
+	f1.Close()
+
+	srcNormalOpaque := filepath.Join(tmpDir, "normal_opaque.png")
+	f2, _ := os.Create(srcNormalOpaque)
+	png.Encode(f2, imgOpaque)
+	f2.Close()
+
+	srcOptO := filepath.Join(tmpDir, "emoji.o.png")
+	f3, _ := os.Create(srcOptO)
+	png.Encode(f3, imgOpaque)
+	f3.Close()
+
+	// 1. Process opaque image with trim=true (transparent-only) -> should NOT crop -> remains 200x200
+	outDir1 := filepath.Join(tmpDir, "out1")
+	outPath1, _, err := processImage(srcNormalOpaque, outDir1, 128, "", true, false, "", false, 0, false, false, true, false)
+	if err != nil {
+		t.Fatalf("failed processImage with trim on opaque image: %v", err)
+	}
+	fOut1, _ := os.Open(outPath1)
+	imgOut1, _ := png.Decode(fOut1)
+	fOut1.Close()
+	if imgOut1.Bounds().Dx() != 200 || imgOut1.Bounds().Dy() != 200 {
+		t.Errorf("expected transparent-only trim on opaque image to stay 200x200, got %dx%d", imgOut1.Bounds().Dx(), imgOut1.Bounds().Dy())
+	}
+
+	// 2. Process transparent image with trim=true (transparent-only) -> trimmed to 100x100 square
+	outDir2 := filepath.Join(tmpDir, "out2")
+	outPath2, _, err := processImage(srcNormalTrans, outDir2, 128, "", true, false, "", false, 0, false, false, true, false)
+	if err != nil {
+		t.Fatalf("failed processImage with trim on transparent image: %v", err)
+	}
+	fOut2, _ := os.Open(outPath2)
+	imgOut2, _ := png.Decode(fOut2)
+	fOut2.Close()
+	if imgOut2.Bounds().Dx() != 100 || imgOut2.Bounds().Dy() != 100 {
+		t.Errorf("expected trimmed transparent square image to be 100x100, got %dx%d", imgOut2.Bounds().Dx(), imgOut2.Bounds().Dy())
+	}
+
+	// 3. Process opaque image with trimOpaque=true -> trimmed to 100x100 square
+	outDir3 := filepath.Join(tmpDir, "out3")
+	outPath3, _, err := processImage(srcNormalOpaque, outDir3, 128, "", true, false, "", false, 0, false, false, false, true)
+	if err != nil {
+		t.Fatalf("failed processImage with trimOpaque on opaque image: %v", err)
+	}
+	fOut3, _ := os.Open(outPath3)
+	imgOut3, _ := png.Decode(fOut3)
+	fOut3.Close()
+	if imgOut3.Bounds().Dx() != 100 || imgOut3.Bounds().Dy() != 100 {
+		t.Errorf("expected trimOpaque on solid background image to be 100x100, got %dx%d", imgOut3.Bounds().Dx(), imgOut3.Bounds().Dy())
+	}
+
+	// 4. Process filename option 'o' (emoji.o.png, filenameOption=true)
+	optsO := &appOptions{
+		filenameOption: true,
+		noResize:       true,
+		outDir:         filepath.Join(tmpDir, "out4"),
+	}
+	resOCount, _, _, _, _ := processBatchImages([]string{srcOptO}, optsO, nil, tmpDir)
+	if resOCount != 1 {
+		t.Fatalf("processBatchImages failed for filename option o")
+	}
+	outPath4 := filepath.Join(optsO.outDir, "emoji.png")
+	fOut4, err := os.Open(outPath4)
+	if err != nil {
+		t.Fatalf("failed to open output for filename option o: %v", err)
+	}
+	imgOut4, _ := png.Decode(fOut4)
+	fOut4.Close()
+	if imgOut4.Bounds().Dx() != 100 || imgOut4.Bounds().Dy() != 100 {
+		t.Errorf("expected filename option o to trim solid background to 100x100, got %dx%d", imgOut4.Bounds().Dx(), imgOut4.Bounds().Dy())
 	}
 }
 

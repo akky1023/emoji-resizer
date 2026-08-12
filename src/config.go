@@ -53,6 +53,8 @@ type Config struct {
 	NoResize        *bool       `json:"no_resize"`
 	NoResizeIfSmall *bool       `json:"no_resize_if_small"`
 	Rect            *bool       `json:"rect"`
+	Trim            *bool       `json:"trim"`
+	TrimOpaque      *bool       `json:"trim_opaque"`
 	ZipMode         *bool       `json:"zip"`
 	AutoRect        interface{} `json:"auto_rect"`
 	Skip            *bool       `json:"skip"`
@@ -65,7 +67,7 @@ func parseAndApplyConfig(configPath string, seenFlags map[string]bool,
 	size *int, outDir *string, suffix *string, namePrefix *string, nameSuffix *string,
 	recursive *bool, noResize *bool, rect *bool, zipMode *bool, skip *bool,
 	autoRect *AutoRectValue, cfgCategory *string, cfgLicense *string, noResizeIfSmall *bool,
-	filenameOption *bool) error {
+	filenameOption *bool, trim *bool, trimOpaque *bool) error {
 
 	var shouldLoadConfig bool
 	var finalConfigPath string
@@ -117,6 +119,12 @@ func parseAndApplyConfig(configPath string, seenFlags map[string]bool,
 	}
 	if cfg.Rect != nil && !seenFlags["rect"] {
 		*rect = *cfg.Rect
+	}
+	if cfg.Trim != nil && !seenFlags["trim"] {
+		*trim = *cfg.Trim
+	}
+	if cfg.TrimOpaque != nil && !seenFlags["trim-opaque"] {
+		*trimOpaque = *cfg.TrimOpaque
 	}
 	if cfg.ZipMode != nil && !seenFlags["zip"] {
 		*zipMode = *cfg.ZipMode

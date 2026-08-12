@@ -80,7 +80,136 @@ func scanDirectory(dirPath string, recursive bool, outDir string, absOutDir stri
 	return files, nil
 }
 
-func processImage(srcPath string, outDir string, targetSize int, suffix string, noResize bool, rect bool, customBase string, autoRectActive bool, autoRectRatio float64, skipExist bool, noResizeIfSmall bool) (string, bool, error) {
+func trimImageTransparent(img image.Image) image.Image {
+	bounds := img.Bounds()
+	w := bounds.Dx()
+	h := bounds.Dy()
+	if w == 0 || h == 0 {
+		return img
+	}
+
+	minX, minY := bounds.Max.X, bounds.Max.Y
+	maxX, maxY := bounds.Min.X - 1, bounds.Min.Y - 1
+
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			_, _, _, a := img.At(x, y).RGBA()
+			if a > 0 {
+				if x < minX {
+					minX = x
+				}
+				if x > maxX {
+					maxX = x
+				}
+				if y < minY {
+					minY = y
+				}
+				if y > maxY {
+					maxY = y
+				}
+			}
+		}
+	}
+
+	if minX > maxX || minY > maxY {
+		return img
+	}
+
+	if minX == bounds.Min.X && minY == bounds.Min.Y && maxX == bounds.Max.X-1 && maxY == bounds.Max.Y-1 {
+		return img
+	}
+
+	cropW := maxX - minX + 1
+	cropH := maxY - minY + 1
+	cropped := image.NewRGBA(image.Rect(0, 0, cropW, cropH))
+	draw.Draw(cropped, cropped.Bounds(), img, image.Pt(minX, minY), draw.Src)
+	return cropped
+}
+
+func trimImageOpaque(img image.Image) image.Image {
+	bounds := img.Bounds()
+	w := bounds.Dx()
+	h := bounds.Dy()
+	if w == 0 || h == 0 {
+		return img
+	}
+
+	hasAlpha := false
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			_, _, _, a := img.At(x, y).RGBA()
+			if a == 0 {
+				hasAlpha = true
+				break
+			}
+		}
+		if hasAlpha {
+			break
+		}
+	}
+
+	minX, minY := bounds.Max.X, bounds.Max.Y
+	maxX, maxY := bounds.Min.X - 1, bounds.Min.Y - 1
+
+	if hasAlpha {
+		for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+			for x := bounds.Min.X; x < bounds.Max.X; x++ {
+				_, _, _, a := img.At(x, y).RGBA()
+				if a > 0 {
+					if x < minX {
+						minX = x
+					}
+					if x > maxX {
+						maxX = x
+					}
+					if y < minY {
+						minY = y
+					}
+					if y > maxY {
+						maxY = y
+					}
+				}
+			}
+		}
+	} else {
+		bgR, bgG, bgB, bgA := img.At(bounds.Min.X, bounds.Min.Y).RGBA()
+		for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+			for x := bounds.Min.X; x < bounds.Max.X; x++ {
+				r, g, b, a := img.At(x, y).RGBA()
+				if r != bgR || g != bgG || b != bgB || a != bgA {
+					if x < minX {
+						minX = x
+					}
+					if x > maxX {
+						maxX = x
+					}
+					if y < minY {
+						minY = y
+					}
+					if y > maxY {
+						maxY = y
+					}
+				}
+			}
+		}
+	}
+
+	if minX > maxX || minY > maxY {
+		return img
+	}
+
+	if minX == bounds.Min.X && minY == bounds.Min.Y && maxX == bounds.Max.X-1 && maxY == bounds.Max.Y-1 {
+		return img
+	}
+
+	cropW := maxX - minX + 1
+	cropH := maxY - minY + 1
+	cropped := image.NewRGBA(image.Rect(0, 0, cropW, cropH))
+	draw.Draw(cropped, cropped.Bounds(), img, image.Pt(minX, minY), draw.Src)
+	return cropped
+}
+
+func processImage(srcPath string, outDir string, targetSize int, suffix string, noResize bool, rect bool, customBase string, autoRectActive bool, autoRectRatio float64, skipExist bool, noResizeIfSmall bool, trim bool, trimOpaque bool) (string, bool, error) {
 	// 1. Open the source file
 	file, err := os.Open(srcPath)
 	if err != nil {
@@ -117,6 +246,12 @@ func processImage(srcPath string, outDir string, targetSize int, suffix string, 
 		if err != nil {
 			return "", false, fmt.Errorf("failed to decode image: %w", err)
 		}
+	}
+
+	if trimOpaque {
+		img = trimImageOpaque(img)
+	} else if trim {
+		img = trimImageTransparent(img)
 	}
 
 	bounds := img.Bounds()

@@ -20,6 +20,8 @@ type appOptions struct {
 	noResize        bool
 	noResizeIfSmall bool
 	rect            bool
+	trim            bool
+	trimOpaque      bool
 	showVersion     bool
 	zipMode         bool
 	autoRect        AutoRectValue
@@ -73,6 +75,8 @@ func parseOptions() (*appOptions, []string, error) {
 	flag.BoolVar(&opts.noResize, "no-resize", false, "skip final resizing and keep the original square dimensions")
 	flag.BoolVar(&opts.noResizeIfSmall, "no-resize-if-small", false, "skip resizing if the image is already smaller than the target size")
 	flag.BoolVar(&opts.rect, "rect", false, "resize rectangle keeping aspect ratio, short side matches target size (no padding)")
+	flag.BoolVar(&opts.trim, "trim", false, "trim transparent margins before processing")
+	flag.BoolVar(&opts.trimOpaque, "trim-opaque", false, "trim transparent and solid color background margins before processing")
 	flag.BoolVar(&opts.showVersion, "version", false, "show version information and exit")
 	flag.BoolVar(&opts.zipMode, "zip", false, "pack processed images into a Misskey-compatible emoji ZIP file")
 	flag.Var(&opts.autoRect, "auto-rect", "automatically use rect mode if aspect ratio exceeds threshold (defaults to golden ratio ~1.618)")
@@ -92,7 +96,7 @@ func parseOptions() (*appOptions, []string, error) {
 		&opts.size, &opts.outDir, &opts.suffix, &opts.namePrefix, &opts.nameSuffix,
 		&opts.recursive, &opts.noResize, &opts.rect, &opts.zipMode, &opts.skip,
 		&opts.autoRect, &opts.cfgCategory, &opts.cfgLicense, &opts.noResizeIfSmall,
-		&opts.filenameOption,
+		&opts.filenameOption, &opts.trim, &opts.trimOpaque,
 	); err != nil {
 		return nil, nil, err
 	}

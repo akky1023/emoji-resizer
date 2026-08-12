@@ -10,6 +10,8 @@ import (
 type FilenameOptionResult struct {
 	HasR                bool
 	HasS                bool
+	HasT                bool
+	HasO                bool
 	HasInvalidOptionPos bool
 	RawOpt              string
 	CleanRawBase        string
@@ -21,7 +23,7 @@ func isValidOptionString(s string) bool {
 	}
 	for _, ch := range s {
 		lower := strings.ToLower(string(ch))
-		if lower != "r" && lower != "s" {
+		if lower != "r" && lower != "s" && lower != "t" && lower != "o" {
 			return false
 		}
 	}
@@ -54,6 +56,12 @@ func parseFilenameOption(filePath string) FilenameOptionResult {
 		}
 		if strings.Contains(optLower, "s") {
 			res.HasS = true
+		}
+		if strings.Contains(optLower, "t") {
+			res.HasT = true
+		}
+		if strings.Contains(optLower, "o") {
+			res.HasO = true
 		}
 
 		work = work[:idx]

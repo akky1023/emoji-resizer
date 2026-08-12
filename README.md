@@ -42,6 +42,8 @@ go build -o emoji-resizer.exe ./src
 | :--- | :--- | :--- | :--- |
 | `-size` | `128` | 一辺のサイズ，または短辺のサイズ (`-rect`時) | 大きくても192程度で十分 |
 | `-rect` | `false` | 短辺を `-size` に合わせてリサイズ．アスペクト比はそのまま維持 | |
+| `-trim` | `false` | 四方の透過余白（アルファ領域）のみを自動トリミングする | |
+| `-trim-opaque` | `false` | 四方の透過領域およびベタ塗り背景（左上隅の色と同色領域）を自動トリミングする | |
 | `-auto-rect` | `false` | アスペクト比がしきい値を超える場合 `rect` モードとして扱う．引数は1を超えなければならない | 引数未指定時は`-auto-rect=2.5` |
 | `-out` | `output/` | 出力ディレクトリのパス指定 | |
 | `-suffix` | `なし` | 出力ファイル名に付与する接尾辞 | |
@@ -67,6 +69,8 @@ go build -o emoji-resizer.exe ./src
 | :--- | :--- | :--- |
 | `r` | 強制的に `-rect` として扱う | `-auto-rect` を無視 |
 | `s` | 強制的に正方形 (`-rect`未指定時) として扱う | `-auto-rect`, `-rect` を無視 |
+| `t` | 強制的に `-trim` (透過余白のみトリミング) を有効化して処理する | `r`や`s`と併用可能 (`.tr.png`など) |
+| `o` | 強制的に `-trim-opaque` (透過＋ベタ塗り背景トリミング) を有効化して処理する | `r`や`s`と併用可能 (`.ro.png`など) |
 
 例
 ```
@@ -75,6 +79,12 @@ go build -o emoji-resizer.exe ./src
 
 ほげほげ@ふがふが@ぴよぴよ.s.png
 // ほげほげ, ふがふが, ぴよぴよ, hogehoge, hugahuga, fugafuga, piyopiyo をエイリアスとする長方形の絵文字になる
+
+いぬ.t.png
+// 透過領域の余白のみを削ってから正方形化・リサイズされる絵文字になる
+
+いぬ.o.png
+// 透過領域およびベタ塗り背景を削ってから正方形化・リサイズされる絵文字になる
 ```
 
 ### 設定ファイル (config.json)
@@ -93,6 +103,8 @@ go build -o emoji-resizer.exe ./src
   "no_resize": false,
   "no_resise_if_small": false,
   "rect": false,
+  "trim": false,
+  "trim_opaque": false,
   "zip": true,
   "auto_rect": 1.618,
   "skip": false,

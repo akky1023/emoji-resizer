@@ -129,9 +129,18 @@ func executeCheckMode(filesToProcess []string, zipMode bool, namePrefix, nameSuf
 
 // printStartMessage prints the starting information log before processing images.
 func printStartMessage(filesCount int, opts *appOptions) {
-	var extra string
+	var extras []string
+	if opts.trimOpaque {
+		extras = append(extras, "trim-opaque")
+	} else if opts.trim {
+		extras = append(extras, "trim")
+	}
 	if opts.noResizeIfSmall {
-		extra = ", no-resize-if-small"
+		extras = append(extras, "no-resize-if-small")
+	}
+	var extra string
+	if len(extras) > 0 {
+		extra = ", " + strings.Join(extras, ", ")
 	}
 
 	if opts.noResize {
@@ -147,6 +156,7 @@ func printStartMessage(filesCount int, opts *appOptions) {
 		} else {
 			modeStr = "no-resize: padding only"
 		}
+		modeStr += extra
 		fmt.Printf("Found %d image files. Starting processing (%s)...\n", filesCount, modeStr)
 	} else {
 		if opts.rect {
@@ -223,6 +233,8 @@ func processBatchImages(filesToProcess []string, opts *appOptions, reader *bufio
 
 		actualRect := opts.rect
 		actualAutoRectActive := opts.autoRect.Active
+		actualTrim := opts.trim
+		actualTrimOpaque := opts.trimOpaque
 
 		if opts.filenameOption {
 			fnOpt := parseFilenameOption(filePath)
@@ -233,11 +245,18 @@ func processBatchImages(filesToProcess []string, opts *appOptions, reader *bufio
 				actualRect = false
 				actualAutoRectActive = false
 			}
+			if fnOpt.HasT {
+				actualTrim = true
+			}
+			if fnOpt.HasO {
+				actualTrimOpaque = true
+			}
 		}
 
 		destPath, skipped, err := processImage(
 			filePath, opts.outDir, opts.size, opts.suffix, opts.noResize, actualRect,
 			customBase, actualAutoRectActive, opts.autoRect.Ratio, opts.skip, opts.noResizeIfSmall,
+			actualTrim, actualTrimOpaque,
 		)
 
 		if err != nil {
