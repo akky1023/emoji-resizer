@@ -50,6 +50,8 @@ go build -o emoji-resizer.exe ./src
 | `-name-prefix` | `なし` | 絵文字名の前に付与する接頭辞 | `-zip`時のみ意味があります |
 | `-name-suffix` | `なし` | 絵文字名の後ろに付与する接尾辞 | `-zip`時のみ意味があります |
 | `-recursive` | `false` | 指定したディレクトリ以下のディレクトリもすべて調べる | |
+| `-grouping` | `false` | 入力ディレクトリからの相対パスをカテゴリに追加する | `-zip`時のみ意味があります．有効時は `-recursive=false` を指定しても無視 |
+| `-category` | `なし` | 絵文字の基準カテゴリを指定する | 設定ファイルの `category` より優先．`-zip` 時のカテゴリ入力を省略可能 |
 | `-no-resize` | `false` | 正方形にして終了．圧縮しない |  `-rect`指定時はなにもしない |
 | `-no-resize-if-small` | `false` | size以下なら圧縮しない． | |
 | `-zip` | `false` | Misskey一括インポート用ZIPアーカイブ (`emojis.zip`) を生成する | ファイル名をひらがなにしておくとエイリアスがある程度自動補完されます |
@@ -58,6 +60,14 @@ go build -o emoji-resizer.exe ./src
 | `-config` | `なし` | 設定ファイル（JSON）のパスを指定 | パスの指定を省略したらカレントディレクトリに`config.json`または`config`があるかをチェック |
 | `-check` | `false` | 変換対象をすべてチェックして変換後の絵文字名に被りがないか検証する | 画像の変換処理は**行わない**．他のオプションを指定したときは，その変換を再現する |
 | `-version` | `false` | バージョン情報を表示して終了する | |
+
+### ディレクトリ別のカテゴリ
+
+```bash
+./emoji-resizer.exe -zip -category maincat -grouping /path/to/root
+```
+
+`root/foo.png` は `maincat`，`root/sub1/bar.png` は `maincat/sub1`，`root/sub2/baz.png` は `maincat/sub2` になります．深い階層も `/` で区切って追加します．基準カテゴリを省略した場合は，相対ディレクトリ名だけをカテゴリにし，ルート直下はカテゴリなしになります．
 
 ### ファイル名オプション (個別指定)
 
@@ -100,6 +110,7 @@ go build -o emoji-resizer.exe ./src
   "name_prefix": "pref_",
   "name_suffix": "_suf",
   "recursive": true,
+  "grouping": false,
   "no_resize": false,
   "no_resise_if_small": false,
   "rect": false,

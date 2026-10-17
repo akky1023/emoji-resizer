@@ -620,6 +620,7 @@ func TestParseAndApplyConfig(t *testing.T) {
 	namePrefix := ""
 	nameSuffix := ""
 	recursive := false
+	grouping := false
 	noResize := false
 	noResizeIfSmall := false
 	rect := false
@@ -634,7 +635,7 @@ func TestParseAndApplyConfig(t *testing.T) {
 
 	seenFlags := make(map[string]bool)
 
-	err = parseAndApplyConfig(cfgPath, seenFlags, &size, &outDir, &suffix, &namePrefix, &nameSuffix, &recursive, &noResize, &rect, &zipMode, &skip, &autoRect, &cfgCategory, &cfgLicense, &noResizeIfSmall, &filenameOption, &trim, &trimOpaque)
+	err = parseAndApplyConfig(cfgPath, seenFlags, &size, &outDir, &suffix, &namePrefix, &nameSuffix, &recursive, &noResize, &rect, &zipMode, &skip, &autoRect, &cfgCategory, &cfgLicense, &noResizeIfSmall, &filenameOption, &trim, &trimOpaque, &grouping)
 	if err != nil {
 		t.Fatalf("parseAndApplyConfig failed: %v", err)
 	}
@@ -691,7 +692,7 @@ func TestParseAndApplyConfig(t *testing.T) {
 		"out":  true,
 	}
 
-	err = parseAndApplyConfig(cfgPath, seenFlags, &size, &outDir, &suffix, &namePrefix, &nameSuffix, &recursive, &noResize, &rect, &zipMode, &skip, &autoRect, &cfgCategory, &cfgLicense, &noResizeIfSmall, &filenameOption, &trim, &trimOpaque)
+	err = parseAndApplyConfig(cfgPath, seenFlags, &size, &outDir, &suffix, &namePrefix, &nameSuffix, &recursive, &noResize, &rect, &zipMode, &skip, &autoRect, &cfgCategory, &cfgLicense, &noResizeIfSmall, &filenameOption, &trim, &trimOpaque, &grouping)
 	if err != nil {
 		t.Fatalf("parseAndApplyConfig override run failed: %v", err)
 	}
