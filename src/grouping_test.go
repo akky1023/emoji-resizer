@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/zip"
+	"bufio"
 	"encoding/json"
 	"image"
 	"image/png"
@@ -19,7 +20,7 @@ func TestGroupingCLI(t *testing.T) {
 		t.Fatalf("build: %v\n%s", err, output)
 	}
 	root := filepath.Join(tmp, "root")
-	for _, name := range []string{"foo.png", "sub1/bar.png", "sub2/baz.png", "sub1/deep/qux.png"} {
+	for _, name := range []string{"foo.png", "animals~bar.png", "animals~faces~baz.png", "sub1/deep/qux.png", "カテゴリ~カテゴリ2~ねこ@cat.png"} {
 		filePath := filepath.Join(root, filepath.FromSlash(name))
 		if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
 			t.Fatal(err)
@@ -40,17 +41,14 @@ func TestGroupingCLI(t *testing.T) {
 		flags    []string
 		config   string
 		category string
-		grouped  bool
 		recurse  bool
 	}{
-		{"grouping", []string{"-grouping", "-category", "maincat"}, `{}`, "maincat", true, true},
-		{"recursive_false_after", []string{"-grouping", "-recursive=false", "-category", "maincat"}, `{}`, "maincat", true, true},
-		{"recursive_false_before", []string{"-recursive=false", "-grouping", "-category", "maincat"}, `{}`, "maincat", true, true},
-		{"config", []string{"-recursive=false"}, `{"grouping":true,"recursive":false,"category":"configured"}`, "configured", true, true},
-		{"category_override", []string{"-grouping", "-category", "maincat"}, `{"category":"configured"}`, "maincat", true, true},
-		{"empty_category", []string{"-grouping", "-category="}, `{"category":"configured"}`, "", true, true},
-		{"disabled", []string{"-grouping=false", "-recursive=false", "-category", "maincat"}, `{"grouping":true}`, "maincat", false, false},
-		{"recursive_only", []string{"-recursive", "-category", "maincat"}, `{}`, "maincat", false, true},
+		{"default", []string{"-category", "root"}, `{}`, "root", false},
+		{"recursive", []string{"-recursive", "-category", "root"}, `{}`, "root", true},
+		{"config", nil, `{"category":"configured"}`, "configured", false},
+		{"category_override", []string{"-category", "root"}, `{"category":"configured"}`, "root", false},
+		{"empty_category", []string{"-category="}, `{"category":"configured"}`, "", false},
+		{"filename_option", []string{"-filename-option", "-category", "root"}, `{}`, "root", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			out := filepath.Join(tmp, tc.name)
@@ -66,15 +64,12 @@ func TestGroupingCLI(t *testing.T) {
 			if output, err := cmd.CombinedOutput(); err != nil {
 				t.Fatalf("run: %v\n%s", err, output)
 			}
-			want := map[string]string{"foo": tc.category}
+			joinCategory := func(path string) string {
+				return strings.TrimPrefix(tc.category+"/"+path, "/")
+			}
+			want := map[string]string{"foo": tc.category, "bar": joinCategory("animals"), "baz": joinCategory("animals/faces"), "neko": joinCategory("カテゴリ/カテゴリ2")}
 			if tc.recurse {
-				for name, dir := range map[string]string{"bar": "sub1", "baz": "sub2", "qux": "sub1/deep"} {
-					category := tc.category
-					if tc.grouped {
-						category = strings.TrimPrefix(category+"/"+dir, "/")
-					}
-					want[name] = category
-				}
+				want["qux"] = tc.category
 			}
 			archives, err := filepath.Glob(filepath.Join(out, "*.zip"))
 			if err != nil || len(archives) == 0 {
@@ -112,5 +107,34 @@ func TestGroupingCLI(t *testing.T) {
 				t.Errorf("exported %v, want %v", seen, want)
 			}
 		})
+	}
+	duplicate := filepath.Join(tmp, "other~foo.png")
+	data, err := os.ReadFile(filepath.Join(root, "foo.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(duplicate, data, 0644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(binary, "-check", "-zip", filepath.Join(root, "foo.png"), duplicate)
+	output, err := cmd.CombinedOutput()
+	if err == nil || !strings.Contains(string(output), duplicate) {
+		t.Fatalf("category-free duplicate check: %v\n%s", err, output)
+	}
+}
+
+func TestCategoryFilenameNaming(t *testing.T) {
+	file := "カテゴリ~カテゴリ2~ねこ@cat~alias.r.png"
+	path, category := splitCategoryFilename(file, "root")
+	if path != "ねこ@cat~alias.r.png" || category != "root/カテゴリ/カテゴリ2" {
+		t.Fatalf("split = %q, %q", path, category)
+	}
+	base, name, _, _, _, _, aliases := computeEmojiName(file, true, "pre_", "_post", bufio.NewReader(strings.NewReader("")), true)
+	if base != "pre_neko_post" || name != "neko" || len(aliases) != 1 || aliases[0] != "cat~alias" {
+		t.Fatalf("ZIP name = %q, %q, aliases = %v", base, name, aliases)
+	}
+	base, _, _, _, _, _, _ = computeEmojiName(file, false, "", "", nil, false)
+	if base != strings.TrimSuffix(file, ".png") {
+		t.Fatalf("non-ZIP name = %q", base)
 	}
 }

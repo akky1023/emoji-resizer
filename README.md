@@ -50,7 +50,6 @@ go build -o emoji-resizer.exe ./src
 | `-name-prefix` | `なし` | 絵文字名の前に付与する接頭辞 | `-zip`時のみ意味があります |
 | `-name-suffix` | `なし` | 絵文字名の後ろに付与する接尾辞 | `-zip`時のみ意味があります |
 | `-recursive` | `false` | 指定したディレクトリ以下のディレクトリもすべて調べる | |
-| `-grouping` | `false` | 入力ディレクトリからの相対パスをカテゴリに追加する | `-zip`時のみ意味があります．有効時は `-recursive=false` を指定しても無視 |
 | `-category` | `なし` | 絵文字の基準カテゴリを指定する | 設定ファイルの `category` より優先．`-zip` 時のカテゴリ入力を省略可能 |
 | `-no-resize` | `false` | 正方形にして終了．圧縮しない |  `-rect`指定時はなにもしない |
 | `-no-resize-if-small` | `false` | size以下なら圧縮しない． | |
@@ -61,13 +60,23 @@ go build -o emoji-resizer.exe ./src
 | `-check` | `false` | 変換対象をすべてチェックして変換後の絵文字名に被りがないか検証する | 画像の変換処理は**行わない**．他のオプションを指定したときは，その変換を再現する |
 | `-version` | `false` | バージョン情報を表示して終了する | |
 
-### ディレクトリ別のカテゴリ
+### ファイル名によるカテゴリ
+
+ZIP出力時は `カテゴリ~名前.png` のようにファイル名でカテゴリを指定できます．`~` より前をカテゴリ，最後の要素を絵文字名として扱います．ディレクトリ名はカテゴリに使用しません．
 
 ```bash
-./emoji-resizer.exe -zip -category maincat -grouping /path/to/root
+./emoji-resizer.exe -zip -category root /path/to/images
 ```
 
-`root/foo.png` は `maincat`，`root/sub1/bar.png` は `maincat/sub1`，`root/sub2/baz.png` は `maincat/sub2` になります．深い階層も `/` で区切って追加します．基準カテゴリを省略した場合は，相対ディレクトリ名だけをカテゴリにし，ルート直下はカテゴリなしになります．
+| ファイル名 | カテゴリ | 絵文字名 |
+| :--- | :--- | :--- |
+| `animals~cat.png` | `root/animals` | `cat` |
+| `animals~faces~cat.png` | `root/animals/faces` | `cat` |
+| `cat.png` | `root` | `cat` |
+
+基準カテゴリが空なら，ファイル名のカテゴリだけを使用します．日本語カテゴリもそのまま保持し，絵文字名には従来の読み・ローマ字変換を適用します．`カテゴリ~ねこ@cat.r.png` のようにエイリアスやファイル名オプションも併用できます．空のカテゴリ要素は無視します．
+
+`-grouping`，`-grouping-prefix`，`-grouping-suffix` は廃止しました．サブディレクトリ内も処理する場合は `-recursive` を指定してください．ZIP出力以外では `~` を含むファイル名をそのまま使用します．
 
 ### ファイル名オプション (個別指定)
 
@@ -110,7 +119,6 @@ go build -o emoji-resizer.exe ./src
   "name_prefix": "pref_",
   "name_suffix": "_suf",
   "recursive": true,
-  "grouping": false,
   "no_resize": false,
   "no_resise_if_small": false,
   "rect": false,

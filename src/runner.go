@@ -69,11 +69,16 @@ func executeCheckMode(filesToProcess []string, zipMode bool, namePrefix, nameSuf
 			}
 		}
 
+		namingPath := filePath
+		if zipMode {
+			namingPath, _ = splitCategoryFilename(filePath, "")
+		}
+
 		// 1. Normal name (prefixed and suffixed)
-		ext := filepath.Ext(filePath)
-		base := strings.TrimSuffix(filepath.Base(filePath), ext)
+		ext := filepath.Ext(namingPath)
+		base := strings.TrimSuffix(filepath.Base(namingPath), ext)
 		if filenameOption {
-			fnOpt := parseFilenameOption(filePath)
+			fnOpt := parseFilenameOption(namingPath)
 			if fnOpt.CleanRawBase != "" {
 				base = fnOpt.CleanRawBase
 			}
@@ -214,26 +219,6 @@ func resolveDirectoryPaths(args []string, outDir, absOutDir string) (string, str
 	return absTopLevelInDir, topLevelOutDir
 }
 
-// groupedCategory appends the source directory relative to the input root.
-func groupedCategory(category, root, filePath string) string {
-	if info, err := os.Stat(root); err == nil && !info.IsDir() {
-		root = filepath.Dir(root)
-	}
-	absSrcDir, err := filepath.Abs(filepath.Dir(filePath))
-	if err != nil {
-		return category
-	}
-	rel, err := filepath.Rel(root, absSrcDir)
-	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return category
-	}
-	rel = filepath.ToSlash(rel)
-	if category == "" {
-		return rel
-	}
-	return strings.TrimRight(category, "/") + "/" + rel
-}
-
 // processBatchImages processes each image and gathers zip data if zipMode is enabled.
 func processBatchImages(filesToProcess []string, opts *appOptions, reader *bufio.Reader, absTopLevelInDir string) (int, int, map[string]*dirZipData, []zipItem, []MisskeyEmojiEntry) {
 	dirZips := make(map[string]*dirZipData)
@@ -349,10 +334,7 @@ func processBatchImages(filesToProcess []string, opts *appOptions, reader *bufio
 					Aliases: aliases,
 				},
 			}
-			entry.Emoji.Category = opts.category
-			if opts.grouping {
-				entry.Emoji.Category = groupedCategory(opts.category, absTopLevelInDir, filePath)
-			}
+			_, entry.Emoji.Category = splitCategoryFilename(filePath, opts.category)
 			if opts.license != "" {
 				entry.Emoji.License = opts.license
 			}
