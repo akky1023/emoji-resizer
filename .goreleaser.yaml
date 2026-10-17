@@ -1,5 +1,8 @@
 version: 2
 
+release:
+  mode: keep-existing
+
 before:
   hooks:
     - go mod tidy
@@ -22,10 +25,10 @@ builds:
 
 archives:
   - id: default
-    format: zip
+    formats: [zip]
     format_overrides:
       - goos: linux
-        format: tar.gz
+        formats: [tar.gz]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       - README.md
