@@ -17,6 +17,7 @@ type appOptions struct {
 	nameSuffix      string
 	configPath      string
 	recursive       bool
+	grouping        bool
 	noResize        bool
 	noResizeIfSmall bool
 	rect            bool
@@ -72,6 +73,8 @@ func parseOptions() (*appOptions, []string, error) {
 	flag.StringVar(&opts.nameSuffix, "name-suffix", "", "suffix to append to the emoji name")
 	flag.StringVar(&opts.configPath, "config", "", "path to config file (default: './config.json' if exists)")
 	flag.BoolVar(&opts.recursive, "recursive", false, "recursively scan directories")
+	flag.BoolVar(&opts.grouping, "grouping", false, "append relative directory paths to emoji categories (implies -recursive)")
+	flag.StringVar(&opts.cfgCategory, "category", "", "base emoji category for ZIP metadata")
 	flag.BoolVar(&opts.noResize, "no-resize", false, "skip final resizing and keep the original square dimensions")
 	flag.BoolVar(&opts.noResizeIfSmall, "no-resize-if-small", false, "skip resizing if the image is already smaller than the target size")
 	flag.BoolVar(&opts.rect, "rect", false, "resize rectangle keeping aspect ratio, short side matches target size (no padding)")
@@ -96,9 +99,12 @@ func parseOptions() (*appOptions, []string, error) {
 		&opts.size, &opts.outDir, &opts.suffix, &opts.namePrefix, &opts.nameSuffix,
 		&opts.recursive, &opts.noResize, &opts.rect, &opts.zipMode, &opts.skip,
 		&opts.autoRect, &opts.cfgCategory, &opts.cfgLicense, &opts.noResizeIfSmall,
-		&opts.filenameOption, &opts.trim, &opts.trimOpaque,
+		&opts.filenameOption, &opts.trim, &opts.trimOpaque, &opts.grouping,
 	); err != nil {
 		return nil, nil, err
+	}
+	if opts.grouping {
+		opts.recursive = true
 	}
 
 	if opts.size < 8 || opts.size > 8192 {

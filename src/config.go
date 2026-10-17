@@ -50,6 +50,7 @@ type Config struct {
 	NamePrefix      *string     `json:"name_prefix"`
 	NameSuffix      *string     `json:"name_suffix"`
 	Recursive       *bool       `json:"recursive"`
+	Grouping        *bool       `json:"grouping"`
 	NoResize        *bool       `json:"no_resize"`
 	NoResizeIfSmall *bool       `json:"no_resize_if_small"`
 	Rect            *bool       `json:"rect"`
@@ -67,7 +68,7 @@ func parseAndApplyConfig(configPath string, seenFlags map[string]bool,
 	size *int, outDir *string, suffix *string, namePrefix *string, nameSuffix *string,
 	recursive *bool, noResize *bool, rect *bool, zipMode *bool, skip *bool,
 	autoRect *AutoRectValue, cfgCategory *string, cfgLicense *string, noResizeIfSmall *bool,
-	filenameOption *bool, trim *bool, trimOpaque *bool) error {
+	filenameOption *bool, trim *bool, trimOpaque *bool, grouping *bool) error {
 
 	var shouldLoadConfig bool
 	var finalConfigPath string
@@ -111,6 +112,9 @@ func parseAndApplyConfig(configPath string, seenFlags map[string]bool,
 	if cfg.Recursive != nil && !seenFlags["recursive"] {
 		*recursive = *cfg.Recursive
 	}
+	if cfg.Grouping != nil && !seenFlags["grouping"] {
+		*grouping = *cfg.Grouping
+	}
 	if cfg.NoResize != nil && !seenFlags["no-resize"] {
 		*noResize = *cfg.NoResize
 	}
@@ -135,7 +139,7 @@ func parseAndApplyConfig(configPath string, seenFlags map[string]bool,
 	if cfg.FilenameOption != nil && !seenFlags["filename-option"] {
 		*filenameOption = *cfg.FilenameOption
 	}
-	if cfg.Category != nil {
+	if cfg.Category != nil && !seenFlags["category"] {
 		*cfgCategory = *cfg.Category
 	}
 	if cfg.License != nil {

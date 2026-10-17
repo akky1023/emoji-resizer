@@ -214,6 +214,26 @@ func resolveDirectoryPaths(args []string, outDir, absOutDir string) (string, str
 	return absTopLevelInDir, topLevelOutDir
 }
 
+// groupedCategory appends the source directory relative to the input root.
+func groupedCategory(category, root, filePath string) string {
+	if info, err := os.Stat(root); err == nil && !info.IsDir() {
+		root = filepath.Dir(root)
+	}
+	absSrcDir, err := filepath.Abs(filepath.Dir(filePath))
+	if err != nil {
+		return category
+	}
+	rel, err := filepath.Rel(root, absSrcDir)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return category
+	}
+	rel = filepath.ToSlash(rel)
+	if category == "" {
+		return rel
+	}
+	return strings.TrimRight(category, "/") + "/" + rel
+}
+
 // processBatchImages processes each image and gathers zip data if zipMode is enabled.
 func processBatchImages(filesToProcess []string, opts *appOptions, reader *bufio.Reader, absTopLevelInDir string) (int, int, map[string]*dirZipData, []zipItem, []MisskeyEmojiEntry) {
 	dirZips := make(map[string]*dirZipData)
@@ -329,8 +349,9 @@ func processBatchImages(filesToProcess []string, opts *appOptions, reader *bufio
 					Aliases: aliases,
 				},
 			}
-			if opts.category != "" {
-				entry.Emoji.Category = opts.category
+			entry.Emoji.Category = opts.category
+			if opts.grouping {
+				entry.Emoji.Category = groupedCategory(opts.category, absTopLevelInDir, filePath)
 			}
 			if opts.license != "" {
 				entry.Emoji.License = opts.license
