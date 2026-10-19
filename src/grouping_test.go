@@ -45,6 +45,7 @@ func TestGroupingCLI(t *testing.T) {
 	}{
 		{"default", []string{"-category", "root"}, `{}`, "root", false},
 		{"recursive", []string{"-recursive", "-category", "root"}, `{}`, "root", true},
+		{"parallel", []string{"-jobs", "4", "-recursive", "-category", "root"}, `{}`, "root", true},
 		{"config", nil, `{"category":"configured"}`, "configured", false},
 		{"category_override", []string{"-category", "root"}, `{"category":"configured"}`, "root", false},
 		{"empty_category", []string{"-category="}, `{"category":"configured"}`, "", false},
@@ -61,8 +62,22 @@ func TestGroupingCLI(t *testing.T) {
 			args = append(args, root)
 			cmd := exec.Command(binary, args...)
 			cmd.Stdin = strings.NewReader("\n\n")
-			if output, err := cmd.CombinedOutput(); err != nil {
+			output, err := cmd.CombinedOutput()
+			if err != nil {
 				t.Fatalf("run: %v\n%s", err, output)
+			}
+			if strings.Contains(string(output), "Processing ") || !strings.Contains(string(output), "(==========) 100%") {
+				t.Fatalf("expected compact progress: %s", output)
+			}
+			if tc.recurse {
+				for _, group := range []struct{ dir, total string }{{root, "4"}, {filepath.Join(root, "sub1", "deep"), "1"}} {
+					for _, progress := range []string{"(----------)   0% (0/" + group.total + ")", "(==========) 100% (" + group.total + "/" + group.total + ")"} {
+						wantProgress := group.dir + " ………… " + progress
+						if !strings.Contains(string(output), wantProgress) {
+							t.Errorf("missing directory progress %q: %s", wantProgress, output)
+						}
+					}
+				}
 			}
 			joinCategory := func(path string) string {
 				return strings.TrimPrefix(tc.category+"/"+path, "/")

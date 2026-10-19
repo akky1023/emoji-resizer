@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
 type appOptions struct {
+	jobs            int
 	size            int
 	outDir          string
 	suffix          string
@@ -65,6 +67,7 @@ func preprocessConfigArgs(args []string) []string {
 func parseOptions() (*appOptions, []string, error) {
 	opts := &appOptions{}
 
+	flag.IntVar(&opts.jobs, "jobs", runtime.GOMAXPROCS(0), "maximum number of images processed in parallel (1 for sequential processing)")
 	flag.IntVar(&opts.size, "size", 128, "target resize square size in pixels")
 	flag.StringVar(&opts.outDir, "out", "", "custom output directory path (default: 'output' directory inside the source file's directory)")
 	flag.StringVar(&opts.suffix, "suffix", "", "suffix to append to the output filename (e.g. '_resized')")
@@ -100,6 +103,10 @@ func parseOptions() (*appOptions, []string, error) {
 		&opts.filenameOption, &opts.trim, &opts.trimOpaque,
 	); err != nil {
 		return nil, nil, err
+	}
+
+	if opts.jobs < 1 {
+		return nil, nil, fmt.Errorf("invalid jobs %d (must be at least 1)", opts.jobs)
 	}
 
 	if opts.size < 8 || opts.size > 8192 {

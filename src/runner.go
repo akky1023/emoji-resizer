@@ -228,52 +228,15 @@ func processBatchImages(filesToProcess []string, opts *appOptions, reader *bufio
 	successCount := 0
 	failureCount := 0
 
-	for _, filePath := range filesToProcess {
-		displayPath := filepath.Clean(filePath)
-		fmt.Printf("Processing %s ... ", displayPath)
-
-		customBase, name, hiragana, katakana, hepburn, hasPronunciation, rawAliases := computeEmojiName(
-			filePath, opts.zipMode, opts.namePrefix, opts.nameSuffix, reader, opts.filenameOption,
-		)
-
-		actualRect := opts.rect
-		actualAutoRectActive := opts.autoRect.Active
-		actualTrim := opts.trim
-		actualTrimOpaque := opts.trimOpaque
-
-		if opts.filenameOption {
-			fnOpt := parseFilenameOption(filePath)
-			if fnOpt.HasR {
-				actualRect = true
-				actualAutoRectActive = false
-			} else if fnOpt.HasS {
-				actualRect = false
-				actualAutoRectActive = false
-			}
-			if fnOpt.HasT {
-				actualTrim = true
-			}
-			if fnOpt.HasO {
-				actualTrimOpaque = true
-			}
-		}
-
-		destPath, skipped, err := processImage(
-			filePath, opts.outDir, opts.size, opts.suffix, opts.noResize, actualRect,
-			customBase, actualAutoRectActive, opts.autoRect.Ratio, opts.skip, opts.noResizeIfSmall,
-			actualTrim, actualTrimOpaque,
-		)
-
-		if err != nil {
-			fmt.Printf("Failed: %v\n", err)
+	results := runImageBatches(filesToProcess, opts, reader)
+	for _, result := range results {
+		filePath := result.filePath
+		destPath := result.destPath
+		name, hiragana, katakana, hepburn := result.name, result.hiragana, result.katakana, result.hepburn
+		hasPronunciation, rawAliases := result.hasPronunciation, result.rawAliases
+		if result.err != nil {
 			failureCount++
 			continue
-		}
-
-		if skipped {
-			fmt.Println("Skipped")
-		} else {
-			fmt.Println("Success")
 		}
 		successCount++
 

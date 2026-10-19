@@ -89,7 +89,7 @@ func trimImageTransparent(img image.Image) image.Image {
 	}
 
 	minX, minY := bounds.Max.X, bounds.Max.Y
-	maxX, maxY := bounds.Min.X - 1, bounds.Min.Y - 1
+	maxX, maxY := bounds.Min.X-1, bounds.Min.Y-1
 
 	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
 		for x := bounds.Min.X; x < bounds.Max.X; x++ {
@@ -149,7 +149,7 @@ func trimImageOpaque(img image.Image) image.Image {
 	}
 
 	minX, minY := bounds.Max.X, bounds.Max.Y
-	maxX, maxY := bounds.Min.X - 1, bounds.Min.Y - 1
+	maxX, maxY := bounds.Min.X-1, bounds.Min.Y-1
 
 	if hasAlpha {
 		for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
@@ -209,7 +209,7 @@ func trimImageOpaque(img image.Image) image.Image {
 	return cropped
 }
 
-func processImage(srcPath string, outDir string, targetSize int, suffix string, noResize bool, rect bool, customBase string, autoRectActive bool, autoRectRatio float64, skipExist bool, noResizeIfSmall bool, trim bool, trimOpaque bool) (string, bool, error) {
+func processImage(srcPath string, outDir string, targetSize int, suffix string, noResize bool, rect bool, customBase string, autoRectActive bool, autoRectRatio float64, skipExist bool, noResizeIfSmall bool, trim bool, trimOpaque bool, warnings ...func(string)) (string, bool, error) {
 	// 1. Open the source file
 	file, err := os.Open(srcPath)
 	if err != nil {
@@ -227,7 +227,12 @@ func processImage(srcPath string, outDir string, targetSize int, suffix string, 
 		// Scan for multi-frame animated GIFs to warn the user
 		g, errGif := gif.DecodeAll(file)
 		if errGif == nil && len(g.Image) > 1 {
-			fmt.Printf("(Warning: animated GIF detected, only the first frame will be processed) ")
+			message := "animated GIF detected, only the first frame will be processed"
+			if len(warnings) > 0 {
+				warnings[0](message)
+			} else {
+				fmt.Printf("Warning: %s\n", message)
+			}
 		}
 		// Reset file pointer to read the first frame via the standard Decode path
 		_, errSeek := file.Seek(0, 0)
@@ -493,4 +498,3 @@ func safeRenameOrCopy(src, dest string) error {
 	os.Remove(src)
 	return nil
 }
-
