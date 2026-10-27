@@ -142,17 +142,6 @@ ZIP出力時は `カテゴリ~名前.png` のようにファイル名でカテ�
 ```
 (なんかオプションは手前に付けないと怒られます．)
 
-## リリース
-
-`main` への変更から Release Please がバージョン更新PRを自動作成します．そのPRをマージすると，タグとGitHub Releaseを作成し，GoReleaserが各OSの実行ファイル・アーカイブ・チェックサムを添付します．`package.json` のバージョンと `CHANGELOG.md` もPR内で更新されます．
-
-- コミット名（Squash mergeの場合はPRタイトル）を `fix: 修正内容` にするとパッチ，`feat: 機能内容` にするとマイナー，`feat!: 互換性のない変更内容` にするとメジャーバージョンが上がります．
-- `docs:` や `chore:` だけではリリースPRは作成されません．
-- 手動リリース済みの `v1.11.0` とそのコミットを起点に移行します．既存のタグ・リリースはそのまま残ります．以後，通常のリリースで手動のバージョン更新やタグ作成は不要です．
-- 初回導入時は，GitHubの **Settings → Actions → General → Workflow permissions → Allow GitHub Actions to create and approve pull requests** を有効にします．
-- 標準の `GITHUB_TOKEN` を使うため追加のシークレットは不要です．このトークンで作成されたリリースPRでは通常の `pull_request` CIは自動起動しません．公開用ビルドの前にはテストを実行します．リリースPRにも必須CIを課す場合は，GitHub AppまたはPATのトークンを別途設定してください．
-- 添付ファイルの公開に失敗した場合は，Actionsの **Release → Run workflow** で対象の既存タグを指定して再実行できます．手動の `v*` タグpushによる公開も引き続き利用できます．
-
 ## ライセンス
 
 [MIT License](LICENSE)
