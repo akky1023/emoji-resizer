@@ -84,7 +84,34 @@ func parseFilenameOption(filePath string) FilenameOptionResult {
 	return res
 }
 
+// splitCategoryFilename extracts categories before the name, preserving aliases.
+func splitCategoryFilename(filePath, category string) (string, string) {
+	ext := filepath.Ext(filePath)
+	rawBase := strings.TrimSuffix(filepath.Base(filePath), ext)
+	namePart, aliases, hasAliases := strings.Cut(rawBase, "@")
+	parts := strings.Split(namePart, "~")
+	if len(parts) == 1 || parts[len(parts)-1] == "" {
+		return filePath, category
+	}
+	for _, part := range parts[:len(parts)-1] {
+		if part != "" {
+			if category != "" {
+				category = strings.TrimRight(category, "/") + "/"
+			}
+			category += part
+		}
+	}
+	name := parts[len(parts)-1]
+	if hasAliases {
+		name += "@" + aliases
+	}
+	return filepath.Join(filepath.Dir(filePath), name+ext), category
+}
+
 func computeEmojiName(filePath string, zipMode bool, namePrefix string, nameSuffix string, reader *bufio.Reader, filenameOption bool) (customBase string, name string, hiragana string, katakana string, hepburn string, hasPronunciation bool, rawAliases []string) {
+	if zipMode {
+		filePath, _ = splitCategoryFilename(filePath, "")
+	}
 	ext := filepath.Ext(filePath)
 	rawBase := strings.TrimSuffix(filepath.Base(filePath), ext)
 

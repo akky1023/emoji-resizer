@@ -50,7 +50,7 @@ go build -o emoji-resizer.exe ./src
 | `-name-prefix` | `なし` | 絵文字名の前に付与する接頭辞 | `-zip`時のみ意味があります |
 | `-name-suffix` | `なし` | 絵文字名の後ろに付与する接尾辞 | `-zip`時のみ意味があります |
 | `-recursive` | `false` | 指定したディレクトリ以下のディレクトリもすべて調べる | |
-| `-grouping` | `false` | 入力ディレクトリからの相対パスをカテゴリに追加する | `-zip`時のみ意味があります．有効時は `-recursive=false` を指定しても無視 |
+| `-jobs` | 利用可能なCPU数 | 画像の並列処理数 | `-jobs 1` で逐次処理 |
 | `-category` | `なし` | 絵文字の基準カテゴリを指定する | 設定ファイルの `category` より優先．`-zip` 時のカテゴリ入力を省略可能 |
 | `-no-resize` | `false` | 正方形にして終了．圧縮しない |  `-rect`指定時はなにもしない |
 | `-no-resize-if-small` | `false` | size以下なら圧縮しない． | |
@@ -61,13 +61,22 @@ go build -o emoji-resizer.exe ./src
 | `-check` | `false` | 変換対象をすべてチェックして変換後の絵文字名に被りがないか検証する | 画像の変換処理は**行わない**．他のオプションを指定したときは，その変換を再現する |
 | `-version` | `false` | バージョン情報を表示して終了する | |
 
-### ディレクトリ別のカテゴリ
+### ファイル名によるカテゴリ
+
+ZIP出力時は `カテゴリ~名前.png` のようにファイル名でカテゴリを指定できます．`~` より前をカテゴリ，最後の要素を絵文字名として扱います．
+デフォルトカテゴリが `-category` またはconfigファイルによって指定している場合に `~` でカテゴリが個別に指定されている場合はサブカテゴリとして扱われます．以下を参照してください．
 
 ```bash
-./emoji-resizer.exe -zip -category maincat -grouping /path/to/root
+./emoji-resizer.exe -zip -category root /path/to/images
 ```
 
-`root/foo.png` は `maincat`，`root/sub1/bar.png` は `maincat/sub1`，`root/sub2/baz.png` は `maincat/sub2` になります．深い階層も `/` で区切って追加します．基準カテゴリを省略した場合は，相対ディレクトリ名だけをカテゴリにし，ルート直下はカテゴリなしになります．
+のとき，
+
+| ファイル名 | カテゴリ | 絵文字名 |
+| :--- | :--- | :--- |
+| `animals~cat.png` | `root/animals` | `cat` |
+| `animals~faces~cat.png` | `root/animals/faces` | `cat` |
+| `cat.png` | `root` | `cat` |
 
 ### ファイル名オプション (個別指定)
 
@@ -110,7 +119,6 @@ go build -o emoji-resizer.exe ./src
   "name_prefix": "pref_",
   "name_suffix": "_suf",
   "recursive": true,
-  "grouping": false,
   "no_resize": false,
   "no_resise_if_small": false,
   "rect": false,
@@ -133,17 +141,6 @@ go build -o emoji-resizer.exe ./src
 ./emoji-resizer.exe -config path/to/config.json sample.png sample2.png
 ```
 (なんかオプションは手前に付けないと怒られます．)
-
-## リリース
-
-`main` への変更から Release Please がバージョン更新PRを自動作成します．そのPRをマージすると，タグとGitHub Releaseを作成し，GoReleaserが各OSの実行ファイル・アーカイブ・チェックサムを添付します．`package.json` のバージョンと `CHANGELOG.md` もPR内で更新されます．
-
-- コミット名（Squash mergeの場合はPRタイトル）を `fix: 修正内容` にするとパッチ，`feat: 機能内容` にするとマイナー，`feat!: 互換性のない変更内容` にするとメジャーバージョンが上がります．
-- `docs:` や `chore:` だけではリリースPRは作成されません．
-- 手動リリース済みの `v1.11.0` とそのコミットを起点に移行します．既存のタグ・リリースはそのまま残ります．以後，通常のリリースで手動のバージョン更新やタグ作成は不要です．
-- 初回導入時は，GitHubの **Settings → Actions → General → Workflow permissions → Allow GitHub Actions to create and approve pull requests** を有効にします．
-- 標準の `GITHUB_TOKEN` を使うため追加のシークレットは不要です．このトークンで作成されたリリースPRでは通常の `pull_request` CIは自動起動しません．公開用ビルドの前にはテストを実行します．リリースPRにも必須CIを課す場合は，GitHub AppまたはPATのトークンを別途設定してください．
-- 添付ファイルの公開に失敗した場合は，Actionsの **Release → Run workflow** で対象の既存タグを指定して再実行できます．手動の `v*` タグpushによる公開も引き続き利用できます．
 
 ## ライセンス
 

@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
 type appOptions struct {
+	jobs            int
 	size            int
 	outDir          string
 	suffix          string
@@ -17,7 +19,6 @@ type appOptions struct {
 	nameSuffix      string
 	configPath      string
 	recursive       bool
-	grouping        bool
 	noResize        bool
 	noResizeIfSmall bool
 	rect            bool
@@ -66,6 +67,7 @@ func preprocessConfigArgs(args []string) []string {
 func parseOptions() (*appOptions, []string, error) {
 	opts := &appOptions{}
 
+	flag.IntVar(&opts.jobs, "jobs", runtime.GOMAXPROCS(0), "maximum number of images processed in parallel (1 for sequential processing)")
 	flag.IntVar(&opts.size, "size", 128, "target resize square size in pixels")
 	flag.StringVar(&opts.outDir, "out", "", "custom output directory path (default: 'output' directory inside the source file's directory)")
 	flag.StringVar(&opts.suffix, "suffix", "", "suffix to append to the output filename (e.g. '_resized')")
@@ -73,7 +75,6 @@ func parseOptions() (*appOptions, []string, error) {
 	flag.StringVar(&opts.nameSuffix, "name-suffix", "", "suffix to append to the emoji name")
 	flag.StringVar(&opts.configPath, "config", "", "path to config file (default: './config.json' if exists)")
 	flag.BoolVar(&opts.recursive, "recursive", false, "recursively scan directories")
-	flag.BoolVar(&opts.grouping, "grouping", false, "append relative directory paths to emoji categories (implies -recursive)")
 	flag.StringVar(&opts.cfgCategory, "category", "", "base emoji category for ZIP metadata")
 	flag.BoolVar(&opts.noResize, "no-resize", false, "skip final resizing and keep the original square dimensions")
 	flag.BoolVar(&opts.noResizeIfSmall, "no-resize-if-small", false, "skip resizing if the image is already smaller than the target size")
@@ -99,12 +100,13 @@ func parseOptions() (*appOptions, []string, error) {
 		&opts.size, &opts.outDir, &opts.suffix, &opts.namePrefix, &opts.nameSuffix,
 		&opts.recursive, &opts.noResize, &opts.rect, &opts.zipMode, &opts.skip,
 		&opts.autoRect, &opts.cfgCategory, &opts.cfgLicense, &opts.noResizeIfSmall,
-		&opts.filenameOption, &opts.trim, &opts.trimOpaque, &opts.grouping,
+		&opts.filenameOption, &opts.trim, &opts.trimOpaque,
 	); err != nil {
 		return nil, nil, err
 	}
-	if opts.grouping {
-		opts.recursive = true
+
+	if opts.jobs < 1 {
+		return nil, nil, fmt.Errorf("invalid jobs %d (must be at least 1)", opts.jobs)
 	}
 
 	if opts.size < 8 || opts.size > 8192 {
